@@ -1,1 +1,1 @@
-command! -nargs=0 UD call diffundo#OpenDiff()
+command! -nargs=? UD call diffundo#OpenDiff(<args>)

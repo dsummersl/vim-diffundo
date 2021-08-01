@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from pythonx.diffundo.interface import VimInterface
+from .fixtures import undotree
 
 
 @patch('pythonx.diffundo.interface.vim')
@@ -11,3 +12,11 @@ def test_vert_diffs(new_buffer_mock, vim_mock):
 
     assert vim_mock.called_with("vert diffs")
     assert new_buffer_mock.called
+
+
+@patch('pythonx.diffundo.interface.vim')
+def test_undo_tree(vim_mock):
+    vim_mock.eval.return_value = undotree
+
+    vi = VimInterface()
+    assert vi._undotree() == undotree
