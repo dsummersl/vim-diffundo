@@ -1,24 +1,54 @@
+from contextlib import contextmanager
+
 import vim
+
+@contextmanager
+def within_source(interface):
+    try:
+        interface._focus_window_of_buffer(True)
+        undonr = vim.eval("changenr()")
+
+        yield
+
+        interface._focus_window_of_buffer(True)
+        vim.command(f"silent undo {undonr}")
+        vim.command("diffupdate")
+    finally:
+        pass
 
 
 class VimInterface:
     """An active 'diff' of the current buffer (one diff per tab)"""
 
-    def __init__(self, count: str = "1"):
-        self.vert_diffs()
-        self.earlier(count)
+    def __init__(self):
+        if vim.eval('changenr()') == '0':
+            print("No changes to view!")
+        else:
+            self.vert_diffs()
 
     def _undotree(self):
         return vim.eval("undotree()")
 
+    def _early_late(self, command: str, count: str = "1"):
+        with within_source(self):
+            vim.command(f"silent {command} {count}")
+            lines = vim.current.buffer[0 : len(vim.current.buffer)]
+
+            self._focus_window_of_buffer(False)
+            vim.command("setlocal noreadonly")
+            vim.current.buffer[:] = lines
+            vim.command("setlocal readonly")
+
+
     def earlier(self, count: str = "1"):
-        undonr = vim.eval("changenr()")
-        # vim.command(f"earlier {count}")
+        self._early_late("earlier", count)
+
 
     def later(self, count: str = "1"):
-        vim.command(f"later {count}")
+        self._early_late("later", count)
 
-    def _focus_window(self, source=True):
+
+    def _focus_window_of_buffer(self, source: bool):
         window_var = "t:diffundo_source_bn" if source else "t:diffundo_diff_bn"
         vim.current.window = next(
             w for w in vim.windows if w.buffer.number == int(vim.eval(window_var))
@@ -26,14 +56,21 @@ class VimInterface:
 
     def _new_buffer(self):
         # Set a string that says which undo this is, and its time.
+        filetype = vim.eval("&filetype")
+
         vim.command("enew")
         vim.command(f"let t:diffundo_diff_bn={vim.current.buffer.number}")
+        vim.command(f"setlocal filetype={filetype}")
         vim.command("setlocal buftype=nofile")
         vim.command("setlocal bufhidden=wipe")
         vim.command("setlocal noswapfile")
+        vim.command("setlocal diff")
+        vim.command("setlocal scrollbind")
+        vim.command("setlocal cursorbind")
+        vim.command("setlocal foldmethod=diff")
         vim.command("setlocal readonly")
 
-        self._focus_window()
+        self._focus_window_of_buffer(True)
 
     def vert_diffs(self):
         """Open a vertical diffsplit if one doesn't already exist."""
@@ -44,8 +81,6 @@ class VimInterface:
             # probably the t:diffundo_diff_bn isn't defined
             pass
 
-        # TODO if there is already a scratch buffer open, then don't allow this
-        # to be called again.
         vim.command(f"let t:diffundo_source_bn={vim.current.buffer.number}")
         vim.command("vert diffsplit")
 

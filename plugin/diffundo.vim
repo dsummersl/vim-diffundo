@@ -1,1 +1,2 @@
-command! -nargs=? UD call diffundo#OpenDiff(<args>)
+command! -nargs=? DiffEarlier call diffundo#Earlier(<args>)
+command! -nargs=? DiffLater call diffundo#Later(<args>)
