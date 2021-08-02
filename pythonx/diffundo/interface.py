@@ -2,6 +2,7 @@ from contextlib import contextmanager
 
 import vim
 
+
 @contextmanager
 def within_source(interface):
     try:
@@ -21,7 +22,7 @@ class VimInterface:
     """An active 'diff' of the current buffer (one diff per tab)"""
 
     def __init__(self):
-        if vim.eval('changenr()') == '0':
+        if vim.eval("changenr()") == "0":
             print("No changes to view!")
         else:
             self.vert_diffs()
@@ -31,22 +32,23 @@ class VimInterface:
 
     def _early_late(self, command: str, count: str = "1"):
         with within_source(self):
+            undonr = vim.eval("t:diffundo_diff_undonr")
+            vim.command(f"silent undo {undonr}")
             vim.command(f"silent {command} {count}")
+            undonr = vim.eval("changenr()")
             lines = vim.current.buffer[0 : len(vim.current.buffer)]
 
             self._focus_window_of_buffer(False)
             vim.command("setlocal noreadonly")
             vim.current.buffer[:] = lines
             vim.command("setlocal readonly")
-
+            vim.command(f"let t:diffundo_diff_undonr={undonr}")
 
     def earlier(self, count: str = "1"):
         self._early_late("earlier", count)
 
-
     def later(self, count: str = "1"):
         self._early_late("later", count)
-
 
     def _focus_window_of_buffer(self, source: bool):
         window_var = "t:diffundo_source_bn" if source else "t:diffundo_diff_bn"
@@ -57,6 +59,7 @@ class VimInterface:
     def _new_buffer(self):
         # Set a string that says which undo this is, and its time.
         filetype = vim.eval("&filetype")
+        vim.command("let t:diffundo_diff_undonr=changenr()")
 
         vim.command("enew")
         vim.command(f"let t:diffundo_diff_bn={vim.current.buffer.number}")

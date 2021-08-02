@@ -3,7 +3,6 @@ if exists("b:autoloaded_diffundo")
 endif
 let b:autoloaded_diffundo = 1
 
-" Also import vim as we expect it to be imported in many places.
 py3 from diffundo import VimInterface
 
 function! diffundo#Earlier(count="1")
