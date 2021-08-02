@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import time
 
 import vim
 
@@ -27,8 +28,20 @@ class VimInterface:
         else:
             self.vert_diffs()
 
-    def _undotree(self):
-        return vim.eval("undotree()")
+    def _find_undotree_entry(self, undonr: str):
+        if undonr == "0":
+            return None
+
+        undotree = vim.eval("undotree()")
+        return next(e for e in undotree["entries"] if e["seq"] == undonr)
+
+    def _update_buffer_name(self, entry):
+        if entry is None:
+            vim.command("file 0 - ")
+            return
+
+        time_description = time.strftime('%Y-%m-%d %I:%M:%S %p', time.localtime(float(entry["time"])))
+        vim.command(f"file {entry['seq']} - {time_description}")
 
     def _early_late(self, command: str, count: str = "1"):
         with within_source(self):
@@ -36,6 +49,7 @@ class VimInterface:
             vim.command(f"silent undo {undonr}")
             vim.command(f"silent {command} {count}")
             undonr = vim.eval("changenr()")
+            entry = self._find_undotree_entry(undonr)
             lines = vim.current.buffer[0 : len(vim.current.buffer)]
 
             self._focus_window_of_buffer(False)
@@ -43,6 +57,7 @@ class VimInterface:
             vim.current.buffer[:] = lines
             vim.command("setlocal readonly")
             vim.command(f"let t:diffundo_diff_undonr={undonr}")
+            self._update_buffer_name(entry)
 
     def earlier(self, count: str = "1"):
         self._early_late("earlier", count)
@@ -59,7 +74,9 @@ class VimInterface:
     def _new_buffer(self):
         # Set a string that says which undo this is, and its time.
         filetype = vim.eval("&filetype")
-        vim.command("let t:diffundo_diff_undonr=changenr()")
+        undonr = vim.eval("changenr()")
+        vim.command(f"let t:diffundo_diff_undonr={undonr}")
+        entry = self._find_undotree_entry(undonr)
 
         vim.command("enew")
         vim.command(f"let t:diffundo_diff_bn={vim.current.buffer.number}")
@@ -72,6 +89,7 @@ class VimInterface:
         vim.command("setlocal cursorbind")
         vim.command("setlocal foldmethod=diff")
         vim.command("setlocal readonly")
+        self._update_buffer_name(entry)
 
         self._focus_window_of_buffer(True)
 
