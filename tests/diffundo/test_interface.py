@@ -16,7 +16,7 @@ def test_open_split_already_open(vim_mock):
 
 def test_match_in_lines():
     vi = VimInterface()
-    assert vi._match_in_lines("needle", [], [" a needle"])
+    assert vi._match_in_lines("needle", [], [" a needle"]) == " a needle"
 
 def test_match_in_lines_no_removals():
     vi = VimInterface()

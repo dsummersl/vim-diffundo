@@ -58,9 +58,11 @@ class VimInterface:
             self._place_changenr(lines, undonr)
 
     def _match_in_lines(self, search_term: str, before_lines: list, after_lines: list):
-        additions = [line[1:] for line in difflib.ndiff(before_lines, after_lines) if line.startswith('+')]
+        additions = [line[2:] for line in difflib.ndiff(before_lines, after_lines) if line.startswith('+')]
 
-        return any(search_term in line for line in additions)
+        matches = (line for line in additions if search_term in line)
+
+        return next(matches, False)
 
     def _focus_window_of_buffer(self, source: bool):
         window_var = "t:diffundo_source_bn" if source else "t:diffundo_diff_bn"
@@ -97,6 +99,7 @@ class VimInterface:
         self._early_late("later", count)
 
     def search_earlier(self, search_term: str):
+        """ Find the next undo that added 'search_term'. """
         with within_source(self):
             next_undonr = vim.eval("t:diffundo_diff_undonr")
             vim.command(f"silent undo {next_undonr}")
@@ -111,9 +114,14 @@ class VimInterface:
 
                 if found_match:
                     self._place_changenr(next_lines, next_undonr)
+                    vim.command(f"let t:diffundo_diff_undonr={before_undonr}")
+                    vim.command(f"/{found_match}")
+                    return
 
                 next_lines = before_lines
                 next_undonr = before_undonr
+
+            print("No match found")
 
     def open_split(self):
         """Open a vertical diffsplit if one doesn't already exist."""
