@@ -4,6 +4,13 @@ vim-diffundo
 Open a vertical diffsplit against a files undo history, and quickly pull changes
 from your undo history into your current buffer.
 
+Installation
+------------
+
+Use your favorite package manager to install this plugin. For instance:
+
+    Plug 'dsummersl/vim-diffundo'
+
 Commands
 --------
 
