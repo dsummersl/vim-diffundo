@@ -5,18 +5,19 @@ from .fixtures import undotree
 
 
 @patch('pythonx.diffundo.interface.vim')
-@patch('pythonx.diffundo.interface.VimInterface._new_buffer')
-def test_vert_diffs(new_buffer_mock, vim_mock):
+def test_open_split_already_open(vim_mock):
+    vim_mock.eval.return_value = "0"
+    
     vi = VimInterface()
-    vi.vert_diffs()
+    vi.open_split()
 
-    assert vim_mock.called_with("vert diffs")
-    assert new_buffer_mock.called
+    assert vim_mock.eval.called_with("changenr()")
 
 
-@patch('pythonx.diffundo.interface.vim')
-def test_undo_tree(vim_mock):
-    vim_mock.eval.return_value = undotree
-
+def test_match_in_lines():
     vi = VimInterface()
-    assert vi._undotree() == undotree
+    assert vi._match_in_lines("needle", [], [" a needle"])
+
+def test_match_in_lines_no_removals():
+    vi = VimInterface()
+    assert not vi._match_in_lines("needle", [" a needle"], [])
