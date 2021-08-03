@@ -32,11 +32,11 @@ class VimInterface:
 
     def _update_buffer_name(self, entry):
         if entry is None:
-            vim.command("file 0 - ")
+            vim.command("file {original} - 0")
             return
 
         time_description = time.strftime('%Y-%m-%d %I:%M:%S %p', time.localtime(float(entry["time"])))
-        vim.command(f"file {entry['seq']} - {time_description}")
+        vim.command(f"file {time_description} - {entry['seq']}")
 
     def _place_changenr(self, lines, undonr):
         entry = self._find_undotree_entry(undonr)

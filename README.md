@@ -25,5 +25,14 @@ Setup
 
 Example setup:
 
-    map <leader>u :DiffEarlier<cr>
-    map <leader>r :DiffLater<cr>
+    " Diff against last undo:
+    map <leader>uu :DiffEarlier<cr>
+    map <leader>rr :DiffLater<cr>
+
+    " Diff against last time this buffer was written:
+    map <leader>uf :DiffEarlier 1f<cr>
+    map <leader>rf :DiffLater 1f<cr>
+
+    " Make commands Repeatable (with kreskij/Repeatable.vim):
+    Repeatable map <leader>uf :DiffEarlier 1f<cr>
+    Repeatable map <leader>rf :DiffLater 1f<cr>
