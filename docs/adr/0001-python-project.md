@@ -25,7 +25,7 @@ Adopt the standard layout from
 ### Working with coding agents (and humans)
 
 Much of the code in this project is configured to make working with LLM coding agents easier (and humans too!).
-Agents often produce a common problems (stray comments, dead code, near-duplicate code, imports buried inside functions, sprawling functions), so tooling is chosen to catch at CI time:
+Agents often produce common problems (stray comments, dead code, near-duplicate code, imports buried inside functions, sprawling functions), so tooling is chosen to catch at CI time:
 
 - **No comments or docstrings** ([ast-grep](https://ast-grep.github.io/) rules in `.ast-grep/rules/`).
   Code is expected to be self-documenting. `make lint` flags them and `make fix` strips them. Motivated by

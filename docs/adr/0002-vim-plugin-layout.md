@@ -37,6 +37,13 @@ project-root/
 - Tests then monkeypatch `interface.vim` with `tests.fakevim.FakeVim`, which
   models windows, buffers, tab-local variables and a linear undo history, so the
   interface can be driven end to end without a vim process.
+- The package is kept importable on python 3.8+, because vim loads it with
+  whatever python3 vim itself was built against, which is not the python the
+  developer picked. `requires-python` (3.11) constrains the dev toolchain only,
+  so the `plugin-import` CI job imports the package under 3.8 through 3.13 to
+  keep the two apart. Annotations are deferred with
+  `from __future__ import annotations`, and runtime-evaluated generics (the
+  `UndoEntry` alias) use `typing.Dict` rather than PEP 585/604 syntax.
 - `.vulture-whitelist.py` records the entry points called from vimscript
   (`earlier`, `later`, `search_earlier`, `open_split`); vulture cannot see
   vimscript callers and would otherwise report them as dead code.

@@ -3,7 +3,7 @@ name = "vim-diffundo"
 version = "0.1.0"
 description = "Diff the current buffer against its own undo history."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11" # the dev toolchain; the plugin itself runs on 3.8+ (see docs/adr/0002)
 authors = [
   { name = "Dane Summers", email = "dsummersl@gmail.com" }
 ]
@@ -57,4 +57,4 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 pythonpath = ["pythonx", "tests/stubs"]
 testpaths = ["tests"]
-addopts = "--cov=diffundo --cov-report=term-missing"
+addopts = "--cov=diffundo --cov-report=term-missing --cov-report=html"

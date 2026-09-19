@@ -4,7 +4,7 @@ This file provides guidance when working with code in this repository.
 
 ## Project Overview
 
-See this projects README.md for an overview of the project, and ADR documents in docs/adr/ for architectural decisions.
+See this project's README.md for an overview of the project, and ADR documents in docs/adr/ for architectural decisions.
 
 This is a vim plugin: vimscript in `plugin/` and `autoload/` calls into the
 python package in `pythonx/diffundo/` (vim puts `pythonx/` on `sys.path`).

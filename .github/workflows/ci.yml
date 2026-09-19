@@ -38,3 +38,17 @@ jobs:
           name: coverage-html
           path: htmlcov/
           if-no-files-found: ignore
+
+  plugin-import:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+    container: python:${{ matrix.python-version }}-slim
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Import the plugin package
+        run: PYTHONPATH=pythonx:tests/stubs python -c "import diffundo; diffundo.VimInterface()"

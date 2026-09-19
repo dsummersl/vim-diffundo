@@ -1,18 +1,19 @@
+from __future__ import annotations
+
 import difflib
 import time
-from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Dict, Iterator
 
 import vim
 
 __all__ = ["VimInterface"]
 
-UndoEntry = dict[str, Any]
+UndoEntry = Dict[str, Any]
 
 
 @contextmanager
-def within_source(interface: "VimInterface") -> Iterator[None]:
+def within_source(interface: VimInterface) -> Iterator[None]:
     try:
         interface._focus_window_of_buffer(True)
         undonr = vim.eval("changenr()")
