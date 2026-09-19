@@ -1,15 +1,5 @@
-"""A small fake of the ``vim`` python module.
-
-The plugin talks to vim through ``vim.eval``/``vim.command`` plus a handful of
-objects (``vim.current``, ``vim.windows``).  Rather than asserting on mock call
-lists, this fake models just enough of vim -- windows, buffers, tab-local
-variables and a linear undo history -- that the interface code can be driven
-end to end and the resulting buffer contents inspected.
-"""
-
-
 class FakeError(Exception):
-    """Stand-in for ``vim.error``."""
+    pass
 
 
 class FakeBuffer:
@@ -44,8 +34,6 @@ class FakeWindow:
 
 
 class FakeCurrent:
-    """``vim.current``; assigning a window switches the current buffer too."""
-
     def __init__(self, vim):
         self._vim = vim
 
@@ -67,10 +55,7 @@ class FakeCurrent:
 
 
 class UndoHistory:
-    """A linear undo history: a list of (seq, lines) with a cursor."""
-
     def __init__(self, states, times=None):
-        # states[0] is seq 0 -- the state before any change was made.
         self.states = [list(lines) for lines in states]
         self.times = times or [str(1627784659 + i * 60) for i in range(len(states))]
         self.seq = len(states) - 1
@@ -92,16 +77,11 @@ class UndoHistory:
         return {
             "seq_last": str(len(self.states) - 1),
             "seq_cur": str(self.seq),
-            "entries": [
-                {"seq": str(i), "time": self.times[i]}
-                for i in range(1, len(self.states))
-            ],
+            "entries": [{"seq": str(i), "time": self.times[i]} for i in range(1, len(self.states))],
         }
 
 
 class FakeVim:
-    """Implements the slice of the vim API that ``VimInterface`` uses."""
-
     error = FakeError
 
     def __init__(self, history, filetype="python", name="source.py"):
@@ -118,7 +98,6 @@ class FakeVim:
         self._current_window = self.windows[0]
         self.current = FakeCurrent(self)
 
-    # -- helpers -----------------------------------------------------------
     def _new_buffer_object(self, lines=None, name=""):
         buffer = FakeBuffer(self._next_bufnr, lines, name)
         self._next_bufnr += 1
@@ -132,10 +111,8 @@ class FakeVim:
         return self.buffer_named(self.vars["t:diffundo_diff_bn"])
 
     def _sync_source_buffer(self):
-        """Mirror the undo history into whichever buffer is the source."""
         self.source_buffer[:] = list(self.history.lines)
 
-    # -- the vim api -------------------------------------------------------
     def eval(self, expression):
         if expression == "changenr()":
             return str(self.history.seq)
@@ -163,48 +140,55 @@ class FakeVim:
         stripped = command
         while stripped.startswith("silent "):
             stripped = stripped[len("silent ") :]
+
+        if stripped.startswith("/") or stripped == "diffupdate":
+            return
+
         head, _, rest = stripped.partition(" ")
-        rest = rest.strip()
+        handler = self._command_handlers().get(head)
+        if handler is None:
+            raise FakeError(f"unsupported command: {command}")
+        handler(head, rest.strip())
 
-        if stripped.startswith("let "):
-            name, _, value = stripped[len("let ") :].partition("=")
-            self.vars[name.strip()] = value.strip()
-            return
+    def _command_handlers(self):
+        return {
+            "let": self._command_let,
+            "undo": self._command_undo,
+            "earlier": self._command_earlier_later,
+            "later": self._command_earlier_later,
+            "file": self._command_file,
+            "enew": self._command_enew,
+            "vert": self._command_vert,
+            "setlocal": self._command_setlocal,
+        }
 
-        if head == "undo":
-            self.history.undo(rest)
-            self._sync_source_buffer()
-            return
+    def _command_let(self, head, rest):
+        name, _, value = rest.partition("=")
+        self.vars[name.strip()] = value.strip()
 
-        if head in ("earlier", "later"):
-            getattr(self.history, head)(rest or "1")
-            self._sync_source_buffer()
-            return
+    def _command_undo(self, head, rest):
+        self.history.undo(rest)
+        self._sync_source_buffer()
 
-        if head == "file":
-            self.current.buffer.name = rest
-            return
+    def _command_earlier_later(self, head, rest):
+        getattr(self.history, head)(rest or "1")
+        self._sync_source_buffer()
 
-        if head == "enew":
-            buffer = self._new_buffer_object()
-            self.buffers.append(buffer)
-            self.current.window.buffer = buffer
-            return
+    def _command_file(self, head, rest):
+        self.current.buffer.name = rest
 
-        if stripped.startswith("vert diffsplit"):
-            # vim shows the same buffer in the new window; :enew replaces it.
-            window = FakeWindow(self.current.buffer)
-            self.windows.insert(0, window)
-            self._current_window = window
-            return
+    def _command_enew(self, head, rest):
+        buffer = self._new_buffer_object()
+        self.buffers.append(buffer)
+        self.current.window.buffer = buffer
 
-        if stripped.startswith("setlocal "):
-            option = stripped[len("setlocal ") :]
-            name, _, value = option.partition("=")
-            self.current.buffer.options[name] = value or True
-            return
+    def _command_vert(self, head, rest):
+        if rest != "diffsplit":
+            raise FakeError(f"unsupported command: vert {rest}")
+        window = FakeWindow(self.current.buffer)
+        self.windows.insert(0, window)
+        self._current_window = window
 
-        if head == "diffupdate" or stripped.startswith("/"):
-            return
-
-        raise FakeError(f"unsupported command: {command}")
+    def _command_setlocal(self, head, rest):
+        name, _, value = rest.partition("=")
+        self.current.buffer.options[name] = value or True

@@ -1,8 +1,9 @@
 from unittest.mock import patch
 
 import pytest
+from diffundo import interface as interface_module
+from diffundo.interface import VimInterface
 
-from pythonx.diffundo.interface import VimInterface
 from tests.fakevim import FakeVim, UndoHistory
 
 from .fixtures import undotree
@@ -15,12 +16,8 @@ def interface():
 
 @pytest.fixture
 def opened(interface, vim):
-    """A diff split that has already been opened against the newest state."""
     interface.open_split()
     return interface
-
-
-# -- open_split --------------------------------------------------------------
 
 
 def test_open_split_refuses_an_unchanged_buffer(interface, vim, capsys):
@@ -61,9 +58,6 @@ def test_open_split_is_idempotent(opened, interface, vim):
 
     assert vim.vars["t:diffundo_diff_bn"] == diff_bn
     assert len(vim.windows) == windows
-
-
-# -- earlier / later ---------------------------------------------------------
 
 
 def test_earlier_shows_the_previous_undo_state(opened, interface, vim):
@@ -111,15 +105,10 @@ def test_earlier_names_the_diff_buffer_after_the_undo_entry(opened, interface, v
     assert vim.diff_buffer.name.endswith("- 2")
 
 
-# -- search_earlier ----------------------------------------------------------
-
-
 def test_search_earlier_finds_the_undo_that_added_the_term(opened, interface, vim):
     interface.search_earlier("second")
 
     assert vim.diff_buffer[:] == ["first", "second"]
-    # the diff buffer holds the state containing the match, while the next
-    # search continues from the state just before it.
     assert vim.vars["t:diffundo_diff_undonr"] == "1"
     assert "/second" in vim.commands
 
@@ -145,8 +134,6 @@ def test_search_earlier_restores_the_source_buffer(opened, interface, vim):
 
 
 def test_search_earlier_continues_from_the_previous_match(interface, monkeypatch):
-    from pythonx.diffundo import interface as interface_module
-
     history = UndoHistory([[], ["a"], ["a", "x"], ["a", "x", "b"], ["a", "x", "b", "x"]])
     vim = FakeVim(history)
     monkeypatch.setattr(interface_module, "vim", vim)
@@ -157,9 +144,6 @@ def test_search_earlier_continues_from_the_previous_match(interface, monkeypatch
 
     interface.search_earlier("x")
     assert vim.diff_buffer[:] == ["a", "x"]
-
-
-# -- _match_in_lines ---------------------------------------------------------
 
 
 def test_match_in_lines():
@@ -184,11 +168,8 @@ def test_match_in_lines_returns_the_first_addition_only():
     assert vi._match_in_lines("needle", before, after) == "a needle here"
 
 
-# -- _find_undotree_entry ----------------------------------------------------
-
-
 def test_find_undotree_entry(interface):
-    with patch("pythonx.diffundo.interface.vim") as vim_mock:
+    with patch("diffundo.interface.vim") as vim_mock:
         vim_mock.eval.return_value = undotree.history
 
         assert interface._find_undotree_entry("14") == {
@@ -203,7 +184,7 @@ def test_find_undotree_entry_of_the_original_state(interface):
 
 @pytest.mark.xfail(reason="undotree() nests alternate branches under 'alt'", strict=True)
 def test_find_undotree_entry_on_an_alternate_branch(interface):
-    with patch("pythonx.diffundo.interface.vim") as vim_mock:
+    with patch("diffundo.interface.vim") as vim_mock:
         vim_mock.eval.return_value = undotree.history
 
         assert interface._find_undotree_entry("21")["save"] == "11"

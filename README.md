@@ -40,10 +40,12 @@ Example setup:
 Development
 -----------
 
-The python side of the plugin lives in `pythonx/diffundo` and is tested against
-a fake `vim` module (`tests/fakevim.py`), so no vim process is needed:
+The python half of the plugin lives in `pythonx/diffundo` and is tested against
+a fake `vim` module, so no vim process is needed:
 
-    pip install pytest   # or: poetry install
-    pytest
+    make setup
+    make ci
 
-See [TODO.md](TODO.md) for known bugs and future directions.
+`make ci` runs pytest (with coverage), ruff, ast-grep, mypy, radon and vulture.
+Architecture Decision Records live in `docs/adr`; see `AGENTS.md` for the
+day-to-day commands.

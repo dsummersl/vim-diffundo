@@ -1,12 +1,18 @@
-from contextlib import contextmanager
 import difflib
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
 
 import vim
 
+__all__ = ["VimInterface"]
+
+UndoEntry = dict[str, Any]
+
 
 @contextmanager
-def within_source(interface):
+def within_source(interface: "VimInterface") -> Iterator[None]:
     try:
         interface._focus_window_of_buffer(True)
         undonr = vim.eval("changenr()")
@@ -21,24 +27,25 @@ def within_source(interface):
 
 
 class VimInterface:
-    """An active 'diff' of the current buffer (one diff per tab)"""
-
-    def _find_undotree_entry(self, undonr: str):
+    def _find_undotree_entry(self, undonr: str) -> UndoEntry | None:
         if undonr == "0":
             return None
 
         undotree = vim.eval("undotree()")
-        return next(e for e in undotree["entries"] if e["seq"] == undonr)
+        entry: UndoEntry = next(e for e in undotree["entries"] if e["seq"] == undonr)
+        return entry
 
-    def _update_buffer_name(self, entry):
+    def _update_buffer_name(self, entry: UndoEntry | None) -> None:
         if entry is None:
             vim.command("file {original} - 0")
             return
 
-        time_description = time.strftime('%Y-%m-%d %I:%M:%S %p', time.localtime(float(entry["time"])))
+        time_description = time.strftime(
+            "%Y-%m-%d %I:%M:%S %p", time.localtime(float(entry["time"]))
+        )
         vim.command(f"file {time_description} - {entry['seq']}")
 
-    def _place_changenr(self, lines, undonr):
+    def _place_changenr(self, lines: list[str], undonr: str) -> None:
         entry = self._find_undotree_entry(undonr)
         self._focus_window_of_buffer(False)
         vim.command("setlocal noreadonly")
@@ -47,7 +54,7 @@ class VimInterface:
         vim.command(f"let t:diffundo_diff_undonr={undonr}")
         self._update_buffer_name(entry)
 
-    def _early_late(self, command: str, count: str = "1"):
+    def _early_late(self, command: str, count: str = "1") -> None:
         with within_source(self):
             undonr = vim.eval("t:diffundo_diff_undonr")
             vim.command(f"silent undo {undonr}")
@@ -57,21 +64,24 @@ class VimInterface:
 
             self._place_changenr(lines, undonr)
 
-    def _match_in_lines(self, search_term: str, before_lines: list, after_lines: list):
-        additions = [line[2:] for line in difflib.ndiff(before_lines, after_lines) if line.startswith('+')]
+    def _match_in_lines(
+        self, search_term: str, before_lines: list[str], after_lines: list[str]
+    ) -> str | bool:
+        additions = [
+            line[2:] for line in difflib.ndiff(before_lines, after_lines) if line.startswith("+")
+        ]
 
         matches = (line for line in additions if search_term in line)
 
         return next(matches, False)
 
-    def _focus_window_of_buffer(self, source: bool):
+    def _focus_window_of_buffer(self, source: bool) -> None:
         window_var = "t:diffundo_source_bn" if source else "t:diffundo_diff_bn"
         vim.current.window = next(
             w for w in vim.windows if w.buffer.number == int(vim.eval(window_var))
         )
 
-    def _new_buffer(self):
-        # Set a string that says which undo this is, and its time.
+    def _new_buffer(self) -> None:
         filetype = vim.eval("&filetype")
         undonr = vim.eval("changenr()")
         vim.command(f"let t:diffundo_diff_undonr={undonr}")
@@ -92,20 +102,19 @@ class VimInterface:
 
         self._focus_window_of_buffer(True)
 
-    def earlier(self, count: str = "1"):
+    def earlier(self, count: str = "1") -> None:
         self._early_late("earlier", count)
 
-    def later(self, count: str = "1"):
+    def later(self, count: str = "1") -> None:
         self._early_late("later", count)
 
-    def search_earlier(self, search_term: str):
-        """ Find the next undo that added 'search_term'. """
+    def search_earlier(self, search_term: str) -> None:
         with within_source(self):
             next_undonr = vim.eval("t:diffundo_diff_undonr")
             vim.command(f"silent undo {next_undonr}")
             next_lines = vim.current.buffer[:]
 
-            found_match = False
+            found_match: str | bool = False
             while int(next_undonr) > 0 and not found_match:
                 vim.command("silent earlier")
                 before_lines = vim.current.buffer[:]
@@ -123,17 +132,16 @@ class VimInterface:
 
             print("No match found")
 
-    def open_split(self):
-        """Open a vertical diffsplit if one doesn't already exist."""
+    def open_split(self) -> None:
         if vim.eval("changenr()") == "0":
             print("No changes to view!")
             return
 
         try:
-            if int(vim.eval(f"bufexists(t:diffundo_diff_bn)")):
+            if int(vim.eval("bufexists(t:diffundo_diff_bn)")):
                 return
         except vim.error:
-            # probably the t:diffundo_diff_bn isn't defined
+            # WHY: t:diffundo_diff_bn is undefined until the first split is opened.
             pass
 
         vim.command(f"let t:diffundo_source_bn={vim.current.buffer.number}")
