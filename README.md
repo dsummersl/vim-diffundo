@@ -36,3 +36,14 @@ Example setup:
     " Make commands Repeatable (with kreskij/Repeatable.vim):
     Repeatable map <leader>uf :DiffEarlier 1f<cr>
     Repeatable map <leader>rf :DiffLater 1f<cr>
+
+Development
+-----------
+
+The python side of the plugin lives in `pythonx/diffundo` and is tested against
+a fake `vim` module (`tests/fakevim.py`), so no vim process is needed:
+
+    pip install pytest   # or: poetry install
+    pytest
+
+See [TODO.md](TODO.md) for known bugs and future directions.
