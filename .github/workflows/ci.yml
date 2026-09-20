@@ -52,3 +52,34 @@ jobs:
 
       - name: Import the plugin package
         run: PYTHONPATH=pythonx:tests/stubs python -c "import diffundo; diffundo.VimInterface()"
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.x"
+
+      - name: Set up neovim
+        uses: rhysd/action-setup-vim@v1
+        id: nvim
+        with:
+          neovim: true
+          version: v0.11.3
+
+      - name: Set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the nvim python3 provider
+        run: pip install pynvim
+
+      - name: End-to-end tests
+        run: make e2e
+        env:
+          DENOPS_TEST_NVIM_EXECUTABLE: ${{ steps.nvim.outputs.executable }}

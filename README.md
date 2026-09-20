@@ -56,5 +56,13 @@ a fake `vim` module, so no vim process is needed:
     make ci
 
 `make ci` runs pytest (with coverage), ruff, ast-grep, mypy, radon and vulture.
+
+The vimscript half is covered by a separate end-to-end test that drives a real
+headless neovim through [denops.vim](https://github.com/vim-denops/denops.vim):
+
+    make e2e
+
+It needs `deno`, `nvim` and `pynvim`; see `tests/e2e/README.md`.
+
 Architecture Decision Records live in `docs/adr`; see `AGENTS.md` for the
 day-to-day commands.

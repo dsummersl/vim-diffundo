@@ -25,6 +25,7 @@ make test                                              # Run all tests with pyte
 uv run pytest tests/diffundo/test_interface.py         # Run specific test file
 uv run pytest tests/diffundo/test_interface.py::test_earlier_accepts_a_count
 uv run pytest -v                                       # Verbose output
+make e2e                                               # End-to-end test in a real headless neovim
 ```
 
 Tests never launch vim. `tests/stubs/vim.py` makes `import vim` resolve at
@@ -32,6 +33,11 @@ collection time, and the `vim` fixture monkeypatches `interface.vim` with
 `tests.fakevim.FakeVim` -- a fake of the windows, buffers, tab-local variables
 and undo history the plugin actually uses. Add to the fake when the plugin
 starts using a new part of the vim API.
+
+The one exception is `tests/e2e/`, a deno test that drives a real headless
+neovim through denops.vim to cover the vimscript entry points and `pythonx/`
+loading. `make ci` does not run it -- `make e2e` does, and it needs `deno`,
+`nvim` and `pynvim`. See `tests/e2e/README.md`.
 
 ### Code Quality
 ```bash

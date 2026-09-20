@@ -1,6 +1,10 @@
-.PHONY: setup test lint type adr coverage vulture fix radon treepeat ci
+.PHONY: setup test lint type adr coverage vulture fix radon treepeat ci e2e
 
 PACKAGE = pythonx/diffundo
+
+# The denops.vim checkout @denops/test drives the editor with; see tests/e2e/README.md.
+DENOPS_VERSION = v8.0.2
+DENOPS_PATH = $(CURDIR)/.cache/denops.vim
 
 setup:
 	uv venv
@@ -29,5 +33,11 @@ radon:
 
 treepeat:
 	uv run treepeat detect .
+
+$(DENOPS_PATH):
+	git clone --depth 1 --branch $(DENOPS_VERSION) https://github.com/vim-denops/denops.vim $(DENOPS_PATH)
+
+e2e: $(DENOPS_PATH)
+	cd tests/e2e && DENOPS_TEST_DENOPS_PATH=$(DENOPS_PATH) deno test -A
 
 ci: test lint type radon vulture
