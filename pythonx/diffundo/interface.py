@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import re
 import time
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator
@@ -10,6 +11,9 @@ import vim
 __all__ = ["DiffundoError", "VimInterface"]
 
 UndoEntry = Dict[str, Any]
+
+# WHY: :earlier and :later accept a plain count, a time span or a file write count.
+COUNT_PATTERN = re.compile(r"^\d+[smhdf]?$")
 
 
 class DiffundoError(Exception):
@@ -22,21 +26,37 @@ def reporting_errors() -> Iterator[None]:
         yield
     except DiffundoError as error:
         print(error)
+    except vim.error as error:
+        # WHY: an unhandled vim.error surfaces as a python traceback instead of a message.
+        print(f"diffundo: {error}")
+
+
+def normalized_count(count: str) -> str:
+    count = str(count).strip()
+    if count == "":
+        return "1"
+
+    if not COUNT_PATTERN.match(count):
+        raise DiffundoError(
+            f"diffundo: invalid count: {count} "
+            "(expected a number, optionally followed by s, m, h, d or f)"
+        )
+
+    return count
 
 
 @contextmanager
 def within_source(interface: VimInterface) -> Iterator[None]:
+    interface._focus_window_of_buffer(True)
+    undonr = vim.eval("changenr()")
+
     try:
-        interface._focus_window_of_buffer(True)
-        undonr = vim.eval("changenr()")
-
         yield
-
+    finally:
+        # WHY: a failed undo command must not strand the source buffer in the past.
         interface._focus_window_of_buffer(True)
         vim.command(f"silent undo {undonr}")
         vim.command("diffupdate")
-    finally:
-        pass
 
 
 class VimInterface:
@@ -146,11 +166,13 @@ class VimInterface:
 
     def earlier(self, count: str = "1") -> None:
         with reporting_errors():
+            count = normalized_count(count)
             if self.open_split():
                 self._early_late("earlier", count)
 
     def later(self, count: str = "1") -> None:
         with reporting_errors():
+            count = normalized_count(count)
             if self.open_split():
                 self._early_late("later", count)
 
