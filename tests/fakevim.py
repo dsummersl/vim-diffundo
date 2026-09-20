@@ -98,6 +98,17 @@ class FakeVim:
         self._current_window = self.windows[0]
         self.current = FakeCurrent(self)
 
+    def close_window(self, window):
+        self.windows.remove(window)
+        if self._current_window is window:
+            self._current_window = self.windows[0]
+
+        if window.buffer.options.get("bufhidden") == "wipe":
+            self.buffers.remove(window.buffer)
+
+    def window_of_buffer(self, number):
+        return next(w for w in self.windows if w.buffer.number == int(number))
+
     def _new_buffer_object(self, lines=None, name=""):
         buffer = FakeBuffer(self._next_bufnr, lines, name)
         self._next_bufnr += 1
