@@ -8,8 +8,12 @@ import { fromFileUrl } from "@std/path";
 // the runtimepath.
 const pluginRoot = fromFileUrl(new URL("../../", import.meta.url));
 
+// WHY: `make e2e` clones tpope/vim-repeat here so the suite can press `.`.
+const repeatRoot = `${pluginRoot}.cache/vim-repeat`;
+
 const prelude = [
   `set runtimepath^=${pluginRoot}`,
+  `set runtimepath^=${repeatRoot}`,
   "runtime! plugin/diffundo.vim",
   // WHY: nvim defaults to 'hidden', which hides the E445 that Vim's default
   // raises when a window holding a modified buffer is closed.
@@ -251,5 +255,72 @@ test({
       changenr: 3,
     });
     assertEquals(await denops.eval("&modified"), 1);
+  },
+});
+
+// WHY: vim-repeat replays through feedkeys(), so the queued keys only run once
+// typeahead is flushed.
+async function pressDot(denops: Denops): Promise<void> {
+  await denops.call("feedkeys", ".", "x");
+}
+
+test({
+  mode: "nvim",
+  name: "`.` repeats the last :DiffEarlier through vim-repeat",
+  prelude,
+  fn: async (denops) => {
+    // WHY: vim-repeat has no plugin/ file, so only its autoload script proves
+    // the clone is on the runtimepath.
+    assert(await denops.eval("globpath(&rtp, 'autoload/repeat.vim')"));
+
+    await denops.cmd("enew");
+    await buildHistory(denops, [
+      ["one"],
+      ["one", "two"],
+      ["one", "two", "three"],
+      ["one", "two", "three", "four"],
+    ]);
+
+    await denops.cmd("DiffEarlier");
+    await pressDot(denops);
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one", "two"],
+      sourceLines: ["one", "two", "three", "four"],
+      undonr: 2,
+    });
+
+    await pressDot(denops);
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one"],
+      sourceLines: ["one", "two", "three", "four"],
+      undonr: 1,
+    });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "`.` repeats :DiffEarlier 1f from one file write to the previous one",
+  prelude,
+  fn: async (denops) => {
+    const path = await denops.call("tempname") as string;
+    await denops.cmd(`edit ${path}`);
+
+    await appendState(denops, ["one"]);
+    await denops.cmd("write");
+    await appendState(denops, ["one", "two"]);
+    await denops.cmd("write");
+    await appendState(denops, ["one", "two", "three"]);
+
+    await denops.cmd("DiffEarlier 1f");
+    await pressDot(denops);
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one"],
+      sourceLines: ["one", "two", "three"],
+      undonr: 1,
+    });
   },
 });

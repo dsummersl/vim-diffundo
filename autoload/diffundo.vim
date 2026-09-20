@@ -10,14 +10,13 @@ let s:repeat_argument = ""
 
 " WHY: tpope/vim-repeat replays a <Plug> map, so the last invocation is stored
 " for <Plug>(DiffundoRepeat) to replay, and repeat#set() only records a usable
-" change tick once the diff is in place.
+" change tick once the diff is in place. exists() never autoloads repeat.vim,
+" so silent! is what lets the call work without vim-repeat installed.
 function! s:SetRepeat(function, argument)
   let s:repeat_function = a:function
   let s:repeat_argument = a:argument
 
-  if exists("*repeat#set")
-    call repeat#set("\<Plug>(DiffundoRepeat)")
-  endif
+  silent! call repeat#set("\<Plug>(DiffundoRepeat)")
 endfunction
 
 function! diffundo#Earlier(count="1")
