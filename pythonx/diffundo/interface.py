@@ -41,11 +41,14 @@ def within_source(interface: VimInterface) -> Iterator[None]:
 
 class VimInterface:
     def _find_undotree_entry(self, undonr: str) -> UndoEntry | None:
-        if undonr == "0":
+        # WHY: vim.eval() hands back strings under vim and numbers under neovim.
+        if int(undonr) == 0:
             return None
 
         undotree = vim.eval("undotree()")
-        entry: UndoEntry = next(e for e in undotree["entries"] if e["seq"] == undonr)
+        entry: UndoEntry = next(
+            e for e in undotree["entries"] if int(e["seq"]) == int(undonr)
+        )
         return entry
 
     def _update_buffer_name(self, entry: UndoEntry | None) -> None:
@@ -199,7 +202,7 @@ class VimInterface:
 
         self._leave_stale_diff_window()
 
-        if vim.eval("undotree()")["seq_last"] == "0":
+        if int(vim.eval("undotree()")["seq_last"]) == 0:
             print("No changes to view!")
             return False
 

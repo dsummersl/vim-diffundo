@@ -2,6 +2,19 @@ class FakeError(Exception):
     pass
 
 
+def as_numbers(value):
+    if isinstance(value, dict):
+        return {key: as_numbers(item) for key, item in value.items()}
+
+    if isinstance(value, list):
+        return [as_numbers(item) for item in value]
+
+    if isinstance(value, str) and value.lstrip("-").isdigit():
+        return int(value)
+
+    return value
+
+
 class FakeBuffer:
     def __init__(self, number, lines=None, name=""):
         self.number = number
@@ -84,8 +97,9 @@ class UndoHistory:
 class FakeVim:
     error = FakeError
 
-    def __init__(self, history, filetype="python", name="source.py"):
+    def __init__(self, history, filetype="python", name="source.py", numeric_eval=False):
         self.history = history
+        self.numeric_eval = numeric_eval
         self.filetype = filetype
         self.vars = {}
         self.commands = []
@@ -125,6 +139,11 @@ class FakeVim:
         self.source_buffer[:] = list(self.history.lines)
 
     def eval(self, expression):
+        value = self._eval(expression)
+        # WHY: neovim's python host returns numbers where vim's returns strings.
+        return as_numbers(value) if self.numeric_eval else value
+
+    def _eval(self, expression):
         if expression == "changenr()":
             return str(self.history.seq)
 
@@ -141,7 +160,7 @@ class FakeVim:
 
         if expression.startswith("bufexists("):
             inner = expression[len("bufexists(") : -1]
-            number = self.eval(inner) if inner.startswith("t:") else inner
+            number = self._eval(inner) if inner.startswith("t:") else inner
             return "1" if any(b.number == int(number) for b in self.buffers) else "0"
 
         raise FakeError(f"unsupported eval: {expression}")

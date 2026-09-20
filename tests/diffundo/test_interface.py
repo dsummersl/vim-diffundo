@@ -257,3 +257,29 @@ def test_open_split_returns_to_the_source_window_before_reopening(opened, interf
 
     assert vim.vars["t:diffundo_source_bn"] == str(vim.source_buffer.number)
     assert vim.diff_buffer[:] == ["first", "second"]
+
+
+@pytest.fixture
+def neovim(history, monkeypatch):
+    fake = FakeVim(history, numeric_eval=True)
+    monkeypatch.setattr(interface_module, "vim", fake)
+    return fake
+
+
+def test_earlier_diffs_when_eval_returns_numbers(interface, neovim):
+    interface.earlier()
+
+    assert neovim.diff_buffer[:] == ["first", "second"]
+    assert neovim.diff_buffer.name.endswith("- 2")
+
+
+def test_earlier_refuses_an_empty_undo_tree_when_eval_returns_numbers(
+    interface, monkeypatch, capsys
+):
+    vim = FakeVim(UndoHistory([[]]), numeric_eval=True)
+    monkeypatch.setattr(interface_module, "vim", vim)
+
+    interface.earlier()
+
+    assert capsys.readouterr().out.strip() == "No changes to view!"
+    assert "t:diffundo_diff_bn" not in vim.vars
