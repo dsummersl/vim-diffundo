@@ -1,3 +1,17 @@
-__pycache__
-*.pyc
+__pycache__/
+*.py[cod]
+
+# Environments / tooling
+.venv/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage / test
+*.coverage
+.coverage*
+.htmlcov/
+htmlcov/
+.pytest_cache/
+
+# Local editor config
 .vimrc

@@ -1,18 +1,60 @@
-[tool.poetry]
-name = "pythonx"
+[project]
+name = "vim-diffundo"
 version = "0.1.0"
-description = ""
-authors = ["Dane Summers <dsummersl@yahoo.com>"]
+description = "Diff the current buffer against its own undo history."
+readme = "README.md"
+requires-python = ">=3.11" # the dev toolchain; the plugin itself runs on 3.8+ (see docs/adr/0002)
+authors = [
+  { name = "Dane Summers", email = "dsummersl@gmail.com" }
+]
+license = "Apache-2.0"
+classifiers = ["Programming Language :: Python :: 3", "Typing :: Typed"]
 
-[tool.poetry.dependencies]
-python = "^3.8"
-pynvim = "^0.4.3"
-black = "^21.7b0"
-python-vim = "^0.3"
+[dependency-groups]
+dev = [
+  "pytest>=9.1.1",
+  "pytest-cov>=7.1.0",
+  "ruff>=0.16.4",
+  "mypy>=2.3.1",
+  "pre-commit>=4.6.2",
+  "radon>=6.0.1",
+  "treepeat>=0.8.0",
+  "vulture>=2.16",
+  "ast-grep-cli>=0.39.0",
+]
 
-[tool.poetry.dev-dependencies]
-pytest = "^5.2"
+[tool.uv]
+package = false
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.ruff]
+line-length = 100
+exclude = [".venv", ".git", "build", "dist"]
+lint.select = [
+  "E",   # pycodestyle
+  "W",   # pycodestyle warnings (trailing/blank-line whitespace, auto-fixed after ast-grep removals)
+  "F",   # Pyflakes
+  "I",   # isort (automatically sorts and moves imports to top)
+  "B",   # flake8-bugbear (find likely bugs and design problems in your program)
+  "PLR", # Pylint Refactor (specifically catches misplaced imports)
+  "PLC", # Pylint Convention (specifically catches imports not at the top of the file)
+  "TID", # Tidy imports
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*" = ["PLR2004"]      # Allow magic numbers in tests
+".vulture-whitelist.py" = ["B018"] # Bare attribute references are the vulture whitelist format
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "pythonx"
+packages = ["diffundo"]
+
+[[tool.mypy.overrides]]
+module = "vim"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = ["pythonx", "tests/stubs"]
+testpaths = ["tests"]
+addopts = "--cov=diffundo --cov-report=term-missing --cov-report=html"

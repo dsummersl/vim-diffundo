@@ -36,3 +36,16 @@ Example setup:
     " Make commands Repeatable (with kreskij/Repeatable.vim):
     Repeatable map <leader>uf :DiffEarlier 1f<cr>
     Repeatable map <leader>rf :DiffLater 1f<cr>
+
+Development
+-----------
+
+The python half of the plugin lives in `pythonx/diffundo` and is tested against
+a fake `vim` module, so no vim process is needed:
+
+    make setup
+    make ci
+
+`make ci` runs pytest (with coverage), ruff, ast-grep, mypy, radon and vulture.
+Architecture Decision Records live in `docs/adr`; see `AGENTS.md` for the
+day-to-day commands.

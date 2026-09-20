@@ -1,0 +1,14 @@
+id: no-docstrings-python
+language: python
+severity: error
+message: Docstring not allowed. Prefer a clear function/class name and tests over a docstring.
+rule:
+  kind: expression_statement
+  has:
+    kind: string
+  any:
+    - precedes:
+        regex: '.'
+    - follows:
+        regex: '.'
+fix: ''
