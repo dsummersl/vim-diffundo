@@ -1,5 +1,12 @@
+import re
+
+
 class FakeError(Exception):
     pass
+
+
+# WHY: vim rejects counts that are not a number with an optional s, m, h, d or f unit.
+COUNT_PATTERN = re.compile(r"^(\d+)[smhdf]?$")
 
 
 def as_numbers(value):
@@ -201,7 +208,11 @@ class FakeVim:
         self._sync_source_buffer()
 
     def _command_earlier_later(self, head, rest):
-        getattr(self.history, head)(rest or "1")
+        match = COUNT_PATTERN.match(rest or "1")
+        if match is None:
+            raise FakeError(f"Vim({head}):E475: Invalid argument: {rest}")
+
+        getattr(self.history, head)(match.group(1))
         self._sync_source_buffer()
 
     def _command_file(self, head, rest):

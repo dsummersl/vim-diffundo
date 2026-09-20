@@ -4,7 +4,7 @@ import pytest
 from diffundo import interface as interface_module
 from diffundo.interface import VimInterface
 
-from tests.fakevim import FakeVim, UndoHistory
+from tests.fakevim import FakeError, FakeVim, UndoHistory
 
 from .fixtures import undotree
 
@@ -126,6 +126,56 @@ def test_earlier_accepts_a_count(opened, interface, vim):
 
     assert vim.diff_buffer[:] == ["first"]
     assert vim.vars["t:diffundo_diff_undonr"] == "1"
+
+
+def test_earlier_accepts_a_unit_suffix(opened, interface, vim):
+    interface.earlier("2f")
+
+    assert vim.diff_buffer[:] == ["first"]
+
+
+def test_earlier_reports_an_invalid_count(interface, vim, capsys):
+    interface.earlier("1w")
+
+    assert "invalid count: 1w" in capsys.readouterr().out
+    assert "t:diffundo_diff_bn" not in vim.vars
+
+
+def test_later_reports_an_invalid_count(interface, vim, capsys):
+    interface.later("-3")
+
+    assert "invalid count: -3" in capsys.readouterr().out
+    assert "t:diffundo_diff_bn" not in vim.vars
+
+
+def test_earlier_treats_an_empty_count_as_one(opened, interface, vim):
+    interface.earlier("")
+
+    assert vim.diff_buffer[:] == ["first", "second"]
+
+
+def test_earlier_reports_a_vim_error_without_a_traceback(opened, interface, vim, capsys):
+    def explode(count=1):
+        raise FakeError("Vim(earlier):E475: Invalid argument")
+
+    vim.history.earlier = explode
+
+    interface.earlier()
+
+    assert "E475" in capsys.readouterr().out
+
+
+def test_earlier_restores_the_source_buffer_when_the_undo_fails(opened, interface, vim):
+    def explode(count=1):
+        raise FakeError("Vim(earlier):E475: Invalid argument")
+
+    vim.history.earlier = explode
+
+    interface.earlier()
+
+    assert vim.history.seq == 3
+    assert vim.source_buffer[:] == ["first", "second", "third"]
+    assert vim.current.buffer.number == vim.source_buffer.number
 
 
 def test_earlier_is_relative_to_the_last_diffed_state(opened, interface, vim):
