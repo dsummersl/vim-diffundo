@@ -11,6 +11,9 @@ const pluginRoot = fromFileUrl(new URL("../../", import.meta.url));
 const prelude = [
   `set runtimepath^=${pluginRoot}`,
   "runtime! plugin/diffundo.vim",
+  // WHY: nvim defaults to 'hidden', which hides the E445 that Vim's default
+  // raises when a window holding a modified buffer is closed.
+  "set nohidden",
 ];
 
 interface WindowState {
@@ -45,10 +48,18 @@ async function windowStates(denops: Denops): Promise<WindowState[]> {
   ) as WindowState[];
 }
 
+// WHY: the plugin reports its own failures with print() rather than raising,
+// so they never reject the denops call and only show up in :messages.
+async function assertNoErrors(denops: Denops): Promise<void> {
+  assertEquals(await denops.eval("v:errmsg"), "");
+  assertEquals(await denops.call("execute", "messages"), "");
+}
+
 async function assertDiffSplit(
   denops: Denops,
   expected: { undoLines: string[]; sourceLines: string[]; undonr: number },
 ): Promise<void> {
+  await assertNoErrors(denops);
   assertEquals(await denops.call("winnr", "$"), 2);
 
   const windows = await windowStates(denops);
@@ -68,6 +79,7 @@ async function assertSourceAlone(
   denops: Denops,
   expected: { lines: string[]; changenr: number },
 ): Promise<void> {
+  await assertNoErrors(denops);
   assertEquals(await denops.call("winnr", "$"), 1);
 
   const [window] = await windowStates(denops);
