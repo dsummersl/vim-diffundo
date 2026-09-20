@@ -1,4 +1,5 @@
 import { test } from "@denops/test";
+import type { Denops } from "@denops/core";
 import { assert, assertEquals } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
@@ -7,49 +8,219 @@ import { fromFileUrl } from "@std/path";
 // the runtimepath.
 const pluginRoot = fromFileUrl(new URL("../../", import.meta.url));
 
+const prelude = [
+  `set runtimepath^=${pluginRoot}`,
+  "runtime! plugin/diffundo.vim",
+];
+
+interface WindowState {
+  lines: string[];
+  diff: number;
+  buftype: string;
+  modifiable: number;
+}
+
+// Records `lines` as one undo state. Each state must extend the previous one:
+// clearing the buffer first would cost a second undo block per state.
+async function appendState(denops: Denops, lines: string[]): Promise<void> {
+  await denops.call("setline", 1, lines);
+  // WHY: every RPC write would otherwise land in a single undo block.
+  await denops.cmd("let &undolevels = &undolevels");
+}
+
+// Builds one undo state per entry, so changenr() ends at states.length.
+async function buildHistory(denops: Denops, states: string[][]): Promise<void> {
+  for (const lines of states) {
+    await appendState(denops, lines);
+  }
+}
+
+async function windowStates(denops: Denops): Promise<WindowState[]> {
+  return await denops.eval(
+    "map(range(1, winnr('$')), {_, w -> {" +
+      "'lines': getbufline(winbufnr(w), 1, '$')," +
+      "'diff': getwinvar(w, '&diff')," +
+      "'buftype': getbufvar(winbufnr(w), '&buftype')," +
+      "'modifiable': getbufvar(winbufnr(w), '&modifiable')}})",
+  ) as WindowState[];
+}
+
+async function assertDiffSplit(
+  denops: Denops,
+  expected: { undoLines: string[]; sourceLines: string[]; undonr: number },
+): Promise<void> {
+  assertEquals(await denops.call("winnr", "$"), 2);
+
+  const windows = await windowStates(denops);
+  const undoBuffer = windows.find((w) => w.buftype === "nofile");
+  const sourceBuffer = windows.find((w) => w.buftype === "");
+
+  assert(undoBuffer, "the undo history buffer is not open");
+  assert(sourceBuffer, "the source buffer is not open");
+  assertEquals(undoBuffer.lines, expected.undoLines);
+  assertEquals(sourceBuffer.lines, expected.sourceLines);
+  assertEquals([undoBuffer.diff, sourceBuffer.diff], [1, 1]);
+
+  assertEquals(await denops.eval("t:diffundo_diff_undonr"), expected.undonr);
+}
+
+async function assertSourceAlone(
+  denops: Denops,
+  expected: { lines: string[]; changenr: number },
+): Promise<void> {
+  assertEquals(await denops.call("winnr", "$"), 1);
+
+  const [window] = await windowStates(denops);
+  assertEquals(window.buftype, "");
+  assertEquals(window.lines, expected.lines);
+  assertEquals(window.diff, 0);
+  assertEquals(await denops.call("changenr"), expected.changenr);
+}
+
 test({
   mode: "nvim",
   name: ":DiffEarlier opens a diff split against the previous undo state",
-  prelude: [
-    `set runtimepath^=${pluginRoot}`,
-    "runtime! plugin/diffundo.vim",
-  ],
+  prelude,
   fn: async (denops) => {
     assertEquals(await denops.call("has", "python3"), 1);
 
     await denops.cmd("enew");
-    for (const lines of [["one"], ["one", "two"], ["one", "two", "three"]]) {
-      await denops.call("setline", 1, lines);
-      // WHY: every RPC write would otherwise land in a single undo block.
-      await denops.cmd("let &undolevels = &undolevels");
-    }
+    await buildHistory(denops, [["one"], ["one", "two"], [
+      "one",
+      "two",
+      "three",
+    ]]);
 
     await denops.cmd("DiffEarlier");
 
-    assertEquals(await denops.call("winnr", "$"), 2);
+    await assertDiffSplit(denops, {
+      undoLines: ["one", "two"],
+      sourceLines: ["one", "two", "three"],
+      undonr: 2,
+    });
+  },
+});
 
-    const windows = await denops.eval(
-      "map(range(1, winnr('$')), {_, w -> {" +
-        "'lines': getbufline(winbufnr(w), 1, '$')," +
-        "'diff': getwinvar(w, '&diff')," +
-        "'buftype': getbufvar(winbufnr(w), '&buftype')," +
-        "'modifiable': getbufvar(winbufnr(w), '&modifiable')}})",
-    ) as {
-      lines: string[];
-      diff: number;
-      buftype: string;
-      modifiable: number;
-    }[];
+test({
+  mode: "nvim",
+  name: ":only after :DiffEarlier leaves the source buffer at its latest state",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["one"], ["one", "two"], [
+      "one",
+      "two",
+      "three",
+    ]]);
 
-    const undoBuffer = windows.find((w) => w.buftype === "nofile");
-    const sourceBuffer = windows.find((w) => w.buftype === "");
+    await denops.cmd("DiffEarlier");
+    await denops.cmd("only");
 
-    assert(undoBuffer, "the undo history buffer is not open");
-    assert(sourceBuffer, "the source buffer is not open");
-    assertEquals(undoBuffer.lines, ["one", "two"]);
-    assertEquals(sourceBuffer.lines, ["one", "two", "three"]);
-    assertEquals([undoBuffer.diff, sourceBuffer.diff], [1, 1]);
+    await assertSourceAlone(denops, {
+      lines: ["one", "two", "three"],
+      changenr: 3,
+    });
 
-    assertEquals(await denops.eval("t:diffundo_diff_undonr"), 2);
+    // WHY: the split must reopen cleanly rather than trip over the stale t: vars.
+    await denops.cmd("DiffEarlier");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one", "two"],
+      sourceLines: ["one", "two", "three"],
+      undonr: 2,
+    });
+
+    await denops.cmd("only");
+
+    await assertSourceAlone(denops, {
+      lines: ["one", "two", "three"],
+      changenr: 3,
+    });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":DiffEarlier {count} steps back that many undo states",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [
+      ["one"],
+      ["one", "two"],
+      ["one", "two", "three"],
+      ["one", "two", "three", "four"],
+    ]);
+
+    await denops.cmd("DiffEarlier 2");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one", "two"],
+      sourceLines: ["one", "two", "three", "four"],
+      undonr: 2,
+    });
+
+    // WHY: a second call walks further back from the state the split shows.
+    await denops.cmd("DiffEarlier");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one"],
+      sourceLines: ["one", "two", "three", "four"],
+      undonr: 1,
+    });
+
+    await denops.cmd("only");
+
+    await assertSourceAlone(denops, {
+      lines: ["one", "two", "three", "four"],
+      changenr: 4,
+    });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":DiffEarlier {N}f steps back to the state of an earlier file write",
+  prelude,
+  fn: async (denops) => {
+    const path = await denops.call("tempname") as string;
+    await denops.cmd(`edit ${path}`);
+
+    await appendState(denops, ["one"]);
+    await denops.cmd("write");
+    await appendState(denops, ["one", "two"]);
+    await denops.cmd("write");
+    await appendState(denops, ["one", "two", "three"]);
+
+    await denops.cmd("DiffEarlier 1f");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one", "two"],
+      sourceLines: ["one", "two", "three"],
+      undonr: 2,
+    });
+
+    await denops.cmd("only");
+
+    await assertSourceAlone(denops, {
+      lines: ["one", "two", "three"],
+      changenr: 3,
+    });
+
+    await denops.cmd("DiffEarlier 2f");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one"],
+      sourceLines: ["one", "two", "three"],
+      undonr: 1,
+    });
+
+    await denops.cmd("only");
+
+    await assertSourceAlone(denops, {
+      lines: ["one", "two", "three"],
+      changenr: 3,
+    });
+    assertEquals(await denops.eval("&modified"), 1);
   },
 });
