@@ -33,9 +33,18 @@ Example setup:
     map <leader>uf :DiffEarlier 1f<cr>
     map <leader>rf :DiffLater 1f<cr>
 
-    " Make commands Repeatable (with kreskij/Repeatable.vim):
-    Repeatable map <leader>uf :DiffEarlier 1f<cr>
-    Repeatable map <leader>rf :DiffLater 1f<cr>
+Repeating
+---------
+
+If [tpope/vim-repeat](https://github.com/tpope/vim-repeat) is installed, then
+`.` repeats the last `:DiffEarlier`, `:DiffLater` or `:DiffSearch`, with the
+same arguments you last used. Nothing to configure - it works with your own
+mappings and with the commands typed by hand:
+
+    :DiffEarlier 1f
+    " then press `.` to step back another file write
+
+Without vim-repeat the commands still work, `.` just won't repeat them.
 
 Development
 -----------
