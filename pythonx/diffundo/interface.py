@@ -7,9 +7,21 @@ from typing import Any, Dict, Iterator
 
 import vim
 
-__all__ = ["VimInterface"]
+__all__ = ["DiffundoError", "VimInterface"]
 
 UndoEntry = Dict[str, Any]
+
+
+class DiffundoError(Exception):
+    pass
+
+
+@contextmanager
+def reporting_errors() -> Iterator[None]:
+    try:
+        yield
+    except DiffundoError as error:
+        print(error)
 
 
 @contextmanager
@@ -29,11 +41,12 @@ def within_source(interface: VimInterface) -> Iterator[None]:
 
 class VimInterface:
     def _find_undotree_entry(self, undonr: str) -> UndoEntry | None:
-        if undonr == "0":
+        # WHY: vim.eval() hands back strings under vim and numbers under neovim.
+        if int(undonr) == 0:
             return None
 
         undotree = vim.eval("undotree()")
-        entry: UndoEntry = next(e for e in undotree["entries"] if e["seq"] == undonr)
+        entry: UndoEntry = next(e for e in undotree["entries"] if int(e["seq"]) == int(undonr))
         return entry
 
     def _update_buffer_name(self, entry: UndoEntry | None) -> None:
@@ -76,10 +89,38 @@ class VimInterface:
 
         return next(matches, False)
 
+    def _tab_var(self, name: str) -> str | None:
+        try:
+            return str(vim.eval(name))
+        except vim.error:
+            # WHY: the t: variables are unset in tabs that never opened a diff split.
+            return None
+
+    def _window_of_buffer(self, bufnr: str | None) -> Any | None:
+        if bufnr is None:
+            return None
+
+        return next((w for w in vim.windows if w.buffer.number == int(bufnr)), None)
+
     def _focus_window_of_buffer(self, source: bool) -> None:
         window_var = "t:diffundo_source_bn" if source else "t:diffundo_diff_bn"
-        vim.current.window = next(
-            w for w in vim.windows if w.buffer.number == int(vim.eval(window_var))
+        window = self._window_of_buffer(self._tab_var(window_var))
+        if window is None:
+            raise DiffundoError("The diffundo split is no longer open in this tab.")
+
+        vim.current.window = window
+
+    def _split_is_open(self) -> bool:
+        diff_bn = self._tab_var("t:diffundo_diff_bn")
+        if diff_bn is None or not int(vim.eval(f"bufexists({diff_bn})")):
+            return False
+
+        if self._tab_var("t:diffundo_diff_undonr") is None:
+            return False
+
+        return (
+            self._window_of_buffer(self._tab_var("t:diffundo_source_bn")) is not None
+            and self._window_of_buffer(diff_bn) is not None
         )
 
     def _new_buffer(self) -> None:
@@ -104,12 +145,21 @@ class VimInterface:
         self._focus_window_of_buffer(True)
 
     def earlier(self, count: str = "1") -> None:
-        self._early_late("earlier", count)
+        with reporting_errors():
+            if self.open_split():
+                self._early_late("earlier", count)
 
     def later(self, count: str = "1") -> None:
-        self._early_late("later", count)
+        with reporting_errors():
+            if self.open_split():
+                self._early_late("later", count)
 
     def search_earlier(self, search_term: str) -> None:
+        with reporting_errors():
+            if self.open_split():
+                self._search_earlier(search_term)
+
+    def _search_earlier(self, search_term: str) -> None:
         with within_source(self):
             next_undonr = vim.eval("t:diffundo_diff_undonr")
             vim.command(f"silent undo {next_undonr}")
@@ -133,19 +183,29 @@ class VimInterface:
 
             print("No match found")
 
-    def open_split(self) -> None:
-        if vim.eval("changenr()") == "0":
-            print("No changes to view!")
+    def _leave_stale_diff_window(self) -> None:
+        diff_bn = self._tab_var("t:diffundo_diff_bn")
+        if diff_bn is None or vim.current.buffer.number != int(diff_bn):
             return
 
-        try:
-            if int(vim.eval("bufexists(t:diffundo_diff_bn)")):
-                return
-        except vim.error:
-            # WHY: t:diffundo_diff_bn is undefined until the first split is opened.
-            pass
+        source_window = self._window_of_buffer(self._tab_var("t:diffundo_source_bn"))
+        if source_window is None:
+            raise DiffundoError("The diffundo source window is no longer open in this tab.")
+
+        vim.current.window = source_window
+
+    def open_split(self) -> bool:
+        if self._split_is_open():
+            return True
+
+        self._leave_stale_diff_window()
+
+        if int(vim.eval("undotree()")["seq_last"]) == 0:
+            print("No changes to view!")
+            return False
 
         vim.command(f"let t:diffundo_source_bn={vim.current.buffer.number}")
         vim.command("vert diffsplit")
 
         self._new_buffer()
+        return True

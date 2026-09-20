@@ -20,14 +20,68 @@ def opened(interface, vim):
     return interface
 
 
-def test_open_split_refuses_an_unchanged_buffer(interface, vim, capsys):
-    vim.history.undo(0)
+def test_open_split_refuses_a_buffer_without_undo_history(interface, monkeypatch, capsys):
+    vim = FakeVim(UndoHistory([[]]))
+    monkeypatch.setattr(interface_module, "vim", vim)
 
-    interface.open_split()
-
+    assert interface.open_split() is False
     assert capsys.readouterr().out.strip() == "No changes to view!"
     assert len(vim.windows) == 1
     assert "t:diffundo_diff_bn" not in vim.vars
+
+
+def test_open_split_accepts_history_the_buffer_has_already_undone(interface, vim):
+    vim.history.undo(0)
+
+    assert interface.open_split() is True
+    assert len(vim.windows) == 2
+    assert vim.vars["t:diffundo_diff_undonr"] == "0"
+
+
+def test_earlier_opens_the_split_itself(interface, vim):
+    interface.earlier()
+
+    assert vim.diff_buffer[:] == ["first", "second"]
+
+
+def test_earlier_reports_a_buffer_without_undo_history(interface, monkeypatch, capsys):
+    vim = FakeVim(UndoHistory([[]]))
+    monkeypatch.setattr(interface_module, "vim", vim)
+
+    interface.earlier()
+
+    assert capsys.readouterr().out.strip() == "No changes to view!"
+    assert "t:diffundo_diff_bn" not in vim.vars
+
+
+def test_earlier_reopens_the_split_when_the_source_tab_variable_is_gone(opened, interface, vim):
+    # WHY: a tab holding a stale t:diffundo_diff_bn used to raise E121 on the missing source.
+    del vim.vars["t:diffundo_source_bn"]
+
+    interface.earlier()
+
+    assert vim.vars["t:diffundo_source_bn"] == str(vim.source_buffer.number)
+    assert vim.diff_buffer[:] == ["first", "second"]
+
+
+def test_earlier_reopens_the_split_when_the_diff_window_was_closed(opened, interface, vim):
+    diff_bn = vim.vars["t:diffundo_diff_bn"]
+    vim.close_window(vim.window_of_buffer(diff_bn))
+
+    interface.earlier()
+
+    assert vim.vars["t:diffundo_diff_bn"] != diff_bn
+    assert vim.diff_buffer[:] == ["first", "second"]
+    assert len(vim.windows) == 2
+
+
+def test_earlier_reports_a_source_window_that_is_gone(opened, interface, vim, capsys):
+    vim.close_window(vim.window_of_buffer(vim.source_buffer.number))
+    vim.vars["t:diffundo_source_bn"] = str(vim.source_buffer.number)
+
+    interface.earlier()
+
+    assert "no longer open" in capsys.readouterr().out
 
 
 def test_open_split_creates_a_scratch_buffer(opened, vim):
@@ -188,3 +242,44 @@ def test_find_undotree_entry_on_an_alternate_branch(interface):
         vim_mock.eval.return_value = undotree.history
 
         assert interface._find_undotree_entry("21")["save"] == "11"
+
+
+def test_focus_window_of_buffer_reports_a_tab_without_the_split(interface, vim):
+    with pytest.raises(interface_module.DiffundoError):
+        interface._focus_window_of_buffer(False)
+
+
+def test_open_split_returns_to_the_source_window_before_reopening(opened, interface, vim):
+    vim.current.window = vim.window_of_buffer(vim.vars["t:diffundo_diff_bn"])
+    del vim.vars["t:diffundo_diff_undonr"]
+
+    interface.earlier()
+
+    assert vim.vars["t:diffundo_source_bn"] == str(vim.source_buffer.number)
+    assert vim.diff_buffer[:] == ["first", "second"]
+
+
+@pytest.fixture
+def neovim(history, monkeypatch):
+    fake = FakeVim(history, numeric_eval=True)
+    monkeypatch.setattr(interface_module, "vim", fake)
+    return fake
+
+
+def test_earlier_diffs_when_eval_returns_numbers(interface, neovim):
+    interface.earlier()
+
+    assert neovim.diff_buffer[:] == ["first", "second"]
+    assert neovim.diff_buffer.name.endswith("- 2")
+
+
+def test_earlier_refuses_an_empty_undo_tree_when_eval_returns_numbers(
+    interface, monkeypatch, capsys
+):
+    vim = FakeVim(UndoHistory([[]]), numeric_eval=True)
+    monkeypatch.setattr(interface_module, "vim", vim)
+
+    interface.earlier()
+
+    assert capsys.readouterr().out.strip() == "No changes to view!"
+    assert "t:diffundo_diff_bn" not in vim.vars
