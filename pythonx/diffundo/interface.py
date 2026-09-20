@@ -46,9 +46,7 @@ class VimInterface:
             return None
 
         undotree = vim.eval("undotree()")
-        entry: UndoEntry = next(
-            e for e in undotree["entries"] if int(e["seq"]) == int(undonr)
-        )
+        entry: UndoEntry = next(e for e in undotree["entries"] if int(e["seq"]) == int(undonr))
         return entry
 
     def _update_buffer_name(self, entry: UndoEntry | None) -> None:
