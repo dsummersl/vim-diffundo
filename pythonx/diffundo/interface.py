@@ -71,13 +71,22 @@ class VimInterface:
 
     def _update_buffer_name(self, entry: UndoEntry | None) -> None:
         if entry is None:
-            vim.command("file {original} - 0")
-            return
+            label = "{original} - 0"
+        else:
+            time_description = time.strftime(
+                "%Y-%m-%d %I:%M:%S %p", time.localtime(float(entry["time"]))
+            )
+            label = f"{time_description} - {entry['seq']}"
 
-        time_description = time.strftime(
-            "%Y-%m-%d %I:%M:%S %p", time.localtime(float(entry["time"]))
-        )
-        vim.command(f"file {time_description} - {entry['seq']}")
+        vim.command(f"file {label}")
+        self._label_window(label)
+
+    def _label_window(self, label: str) -> None:
+        # WHY: 'laststatus' 3 draws only the focused statusline; the winbar (neovim) stays visible.
+        item = label.replace("%", "%%")
+        vim.command(f"let &l:statusline = '{item}'")
+        if int(vim.eval("exists('+winbar')")):
+            vim.command(f"let &l:winbar = '{item}'")
 
     def _place_changenr(self, lines: list[str], undonr: str) -> None:
         entry = self._find_undotree_entry(undonr)

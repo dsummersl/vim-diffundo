@@ -20,6 +20,10 @@ Commands
 
 *:DiffSearch <needle>*: search your undo history for the addition of `<needle>` and open a vertical diffsplit against that undo version and your current buffer.
 
+The diff window is labelled with the timestamp and sequence number of the undo
+state it shows. The label is set as that window's `'statusline'` and, in neovim,
+its `'winbar'`, so it stays visible even with `laststatus=3`.
+
 Setup
 -----
 

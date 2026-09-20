@@ -21,6 +21,9 @@ interface WindowState {
   diff: number;
   buftype: string;
   modifiable: number;
+  name: string;
+  statusline: string;
+  winbar: string;
 }
 
 // Records `lines` as one undo state. Each state must extend the previous one:
@@ -44,7 +47,10 @@ async function windowStates(denops: Denops): Promise<WindowState[]> {
       "'lines': getbufline(winbufnr(w), 1, '$')," +
       "'diff': getwinvar(w, '&diff')," +
       "'buftype': getbufvar(winbufnr(w), '&buftype')," +
-      "'modifiable': getbufvar(winbufnr(w), '&modifiable')}})",
+      "'modifiable': getbufvar(winbufnr(w), '&modifiable')," +
+      "'name': bufname(winbufnr(w))," +
+      "'statusline': getwinvar(w, '&statusline')," +
+      "'winbar': getwinvar(w, '&winbar')}})",
   ) as WindowState[];
 }
 
@@ -71,6 +77,17 @@ async function assertDiffSplit(
   assertEquals(undoBuffer.lines, expected.undoLines);
   assertEquals(sourceBuffer.lines, expected.sourceLines);
   assertEquals([undoBuffer.diff, sourceBuffer.diff], [1, 1]);
+
+  // WHY: the label must stay visible under 'laststatus' 3, where only the
+  // focused window's statusline is drawn.
+  assert(undoBuffer.name.endsWith(`- ${expected.undonr}`), undoBuffer.name);
+  assertEquals(undoBuffer.statusline, undoBuffer.name);
+  assertEquals(undoBuffer.winbar, undoBuffer.name);
+  // WHY: the source window must keep the editor's global values untouched.
+  assertEquals(
+    [sourceBuffer.statusline, sourceBuffer.winbar],
+    await denops.eval("[&g:statusline, &g:winbar]"),
+  );
 
   assertEquals(await denops.eval("t:diffundo_diff_undonr"), expected.undonr);
 }

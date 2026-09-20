@@ -209,6 +209,25 @@ def test_earlier_names_the_diff_buffer_after_the_undo_entry(opened, interface, v
     assert vim.diff_buffer.name.endswith("- 2")
 
 
+def test_earlier_labels_the_diff_window_with_the_buffer_name(opened, interface, vim):
+    interface.earlier()
+
+    options = vim.diff_buffer.options
+    assert options["statusline"] == vim.diff_buffer.name
+    assert options["winbar"] == vim.diff_buffer.name
+    assert vim.diff_buffer.name.endswith("- 2")
+
+
+def test_open_split_skips_the_winbar_when_the_editor_lacks_it(interface, history, monkeypatch):
+    vim = FakeVim(history, winbar=False)
+    monkeypatch.setattr(interface_module, "vim", vim)
+
+    interface.open_split()
+
+    assert "statusline" in vim.diff_buffer.options
+    assert "winbar" not in vim.diff_buffer.options
+
+
 def test_search_earlier_finds_the_undo_that_added_the_term(opened, interface, vim):
     interface.search_earlier("second")
 

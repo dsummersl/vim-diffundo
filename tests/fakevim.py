@@ -104,9 +104,12 @@ class UndoHistory:
 class FakeVim:
     error = FakeError
 
-    def __init__(self, history, filetype="python", name="source.py", numeric_eval=False):
+    def __init__(
+        self, history, filetype="python", name="source.py", numeric_eval=False, winbar=True
+    ):
         self.history = history
         self.numeric_eval = numeric_eval
+        self.winbar = winbar
         self.filetype = filetype
         self.vars = {}
         self.commands = []
@@ -160,6 +163,9 @@ class FakeVim:
         if expression == "&filetype":
             return self.filetype
 
+        if expression == "exists('+winbar')":
+            return "1" if self.winbar else "0"
+
         if expression.startswith("t:"):
             if expression not in self.vars:
                 raise FakeError(f"E121: Undefined variable: {expression}")
@@ -201,7 +207,12 @@ class FakeVim:
 
     def _command_let(self, head, rest):
         name, _, value = rest.partition("=")
-        self.vars[name.strip()] = value.strip()
+        name, value = name.strip(), value.strip()
+        if name.startswith("&l:"):
+            self.current.buffer.options[name[len("&l:") :]] = value.strip("'")
+            return
+
+        self.vars[name] = value
 
     def _command_undo(self, head, rest):
         self.history.undo(rest)
