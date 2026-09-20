@@ -50,6 +50,14 @@ project-root/
 
 ## Consequences
 
-The python side is fully covered by `make ci`. The vimscript side is not tested
-at all -- an end-to-end smoke test driving `vim --clean -es` over a scratch file
-with a real undo history would close that gap.
+The python side is fully covered by `make ci`. The vimscript side is covered by
+one end-to-end happy path in `tests/e2e/`: `@denops/test` starts a headless
+neovim with denops.vim loaded, puts this repository on the runtimepath and
+drives `:DiffEarlier` over a scratch buffer with a real undo history, so the
+command definitions, the `py3` bridge and `pythonx/` loading are exercised for
+real. It runs as its own `e2e` CI job rather than from `make ci`, which stays a
+pure python gate: the e2e test needs deno, neovim and pynvim installed.
+
+It is neovim only, because denops needs Vim 9.1.1646 or newer and the Vim it
+drives also needs `+python3`; running `mode: "all"` once such a Vim is available
+in CI would cover the primary target too.
