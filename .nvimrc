@@ -2,16 +2,22 @@
 " require('lazy-loader')()
 " EOF
 
-let g:gutentags_ctags_exclude += ['*/.venv/*']
+let g:gutentags_ctags_exclude += ['*/lua_modules/*']
 let g:projectionist_heuristics = {
-      \ 'pyproject.toml': {
-      \   'pythonx/diffundo/*.py': {
+      \ 'lua/&spec/': {
+      \   'lua/diffundo/*.lua': {
       \     'type': 'function',
-      \     'alternate': 'tests/diffundo/test_{basename}.py'
+      \     'alternate': [
+      \       'spec/{dirname}{basename}_spec.lua',
+      \       'spec/{dirname}/{basename}_spec.lua',
+      \     ]
       \   },
-      \   'tests/diffundo/test_*.py': {
+      \   'spec/**/*_spec.lua': {
       \     'type': 'test',
-      \     'alternate': 'pythonx/diffundo/{basename}.py'
+      \     'alternate': [
+      \       'lua/diffundo/{dirname}{basename}.lua',
+      \       'lua/diffundo/{dirname}/{basename}.lua',
+      \     ]
       \   },
       \ },
       \ }

@@ -4,7 +4,7 @@ Date: 2026-09-19
 
 ## Status
 
-Accepted
+Superseded by [3. Lua port](0003-lua-port.md)
 
 ## Context
 

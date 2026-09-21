@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime.version": "LuaJIT",
+  "runtime.path": ["lua/?.lua", "lua/?/init.lua"],
+  "runtime.pathStrict": true,
+  "workspace.library": ["types", "lua_modules/share/lua"],
+  "workspace.ignoreDir": ["lua_modules", ".git"],
+  "workspace.checkThirdParty": false,
+  "diagnostics.groupFileStatus": {
+    "strict": "Any",
+    "type-check": "Any",
+    "unused": "Any",
+    "unbalanced": "Any",
+    "redefined": "Any",
+    "global": "Any"
+  },
+  "diagnostics.groupSeverity": {
+    "strict": "Error",
+    "type-check": "Error",
+    "unused": "Error",
+    "unbalanced": "Error",
+    "redefined": "Error",
+    "global": "Error"
+  },
+  "type.checkTableShape": true,
+  "type.weakUnionCheck": false,
+  "type.weakNilCheck": false,
+  "type.castNumberToInteger": false
+}

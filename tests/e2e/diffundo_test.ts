@@ -4,8 +4,7 @@ import { assert, assertEquals } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 // WHY: denops.vim only drives a real editor here -- the plugin under test is
-// vimscript plus pythonx, so the host needs +python3 (pynvim) and the repo on
-// the runtimepath.
+// Lua, so the host just needs the repo on the runtimepath.
 const pluginRoot = fromFileUrl(new URL("../../", import.meta.url));
 
 // WHY: `make e2e` clones tpope/vim-repeat here so the suite can press `.`.
@@ -14,7 +13,7 @@ const repeatRoot = `${pluginRoot}.cache/vim-repeat`;
 const prelude = [
   `set runtimepath^=${pluginRoot}`,
   `set runtimepath^=${repeatRoot}`,
-  "runtime! plugin/diffundo.vim",
+  "runtime! plugin/diffundo.lua",
   // WHY: nvim defaults to 'hidden', which hides the E445 that Vim's default
   // raises when a window holding a modified buffer is closed.
   "set nohidden",
@@ -115,7 +114,7 @@ test({
   name: ":DiffEarlier opens a diff split against the previous undo state",
   prelude,
   fn: async (denops) => {
-    assertEquals(await denops.call("has", "python3"), 1);
+    assertEquals(await denops.call("exists", ":DiffEarlier"), 2);
 
     await denops.cmd("enew");
     await buildHistory(denops, [["one"], ["one", "two"], [

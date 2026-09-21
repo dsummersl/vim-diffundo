@@ -1,17 +1,9 @@
-__pycache__/
-*.py[cod]
-
-# Environments / tooling
-.venv/
-.mypy_cache/
-.ruff_cache/
+lua_modules/
+.luals/
 
 # Coverage / test
-*.coverage
-.coverage*
-.htmlcov/
-htmlcov/
-.pytest_cache/
+luacov.stats.out
+luacov.report.out
 
 # Local editor config
 .vimrc

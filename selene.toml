@@ -1,0 +1,9 @@
+std = "lua51+busted+vim"
+
+[rules]
+unused_variable = "deny"
+unreachable_code = "deny"
+shadowing = "deny"
+global_usage = "deny"
+empty_if = "deny"
+empty_loop = "deny"

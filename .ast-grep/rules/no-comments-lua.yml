@@ -1,0 +1,13 @@
+id: no-comments-lua
+language: lua
+severity: error
+message: Comment not allowed. Prefer clear naming/types/tests; use "-- WHY:" for a non-obvious rationale a reviewer would otherwise ask about.
+note: |
+  Allowlisted: shebangs, `---@` LuaLS type annotations, `-- selene:`, `-- stylua:`,
+  `-- luacov:`, `-- WHY:`, SPDX headers. Plain `---` doc comments are the Lua
+  equivalent of docstrings and are banned; keep the `---@param`/`---@return` lines only.
+rule:
+  kind: comment
+  not:
+    regex: '^#!|^---@|selene:|stylua:|luacov:|WHY:|SPDX-License-Identifier'
+fix: ''

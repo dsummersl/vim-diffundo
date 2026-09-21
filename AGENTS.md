@@ -6,9 +6,9 @@ This file provides guidance when working with code in this repository.
 
 See this project's README.md for an overview of the project, and ADR documents in docs/adr/ for architectural decisions.
 
-This is a vim plugin: vimscript in `plugin/` and `autoload/` calls into the
-python package in `pythonx/diffundo/` (vim puts `pythonx/` on `sys.path`).
-See docs/adr/0002-vim-plugin-layout.md before moving anything.
+This is a neovim plugin: `plugin/diffundo.lua` defines the commands and calls
+into the Lua package in `lua/diffundo/`. See docs/adr/0003-lua-port.md before
+moving anything.
 
 ## Development Commands
 
@@ -16,36 +16,38 @@ See docs/adr/0002-vim-plugin-layout.md before moving anything.
 
 ### Setup
 ```bash
-make setup  # Set up venv and sync dependencies with uv
+make setup  # Install rocks into the local lua_modules/ tree
 ```
 
 ### Testing
 ```bash
-make test                                              # Run all tests with pytest and coverage
-uv run pytest tests/diffundo/test_interface.py         # Run specific test file
-uv run pytest tests/diffundo/test_interface.py::test_earlier_accepts_a_count
-uv run pytest -v                                       # Verbose output
+make test                                              # Run all tests with busted and coverage
+eval $(luarocks --tree lua_modules path --bin) && busted spec/init_spec.lua   # Run specific test file
+eval $(luarocks --tree lua_modules path --bin) && busted --filter "earlier"   # Run tests matching a name
+```
+
+Tests never launch neovim. `spec/fakevim.lua` is a fake of the slice of the
+`vim` global the plugin uses (windows, buffers, `vim.t`, `vim.bo`/`vim.wo`,
+`vim.cmd` and a linear undo history); each spec installs it with
+`fake:install()`. Add to the fake when the plugin starts using a new part of
+the neovim API, and declare that part in `types/vim.lua` so `make type` knows
+about it.
+
+The one exception is `tests/e2e/`, a deno test that drives a real headless
+neovim through denops.vim to cover the commands and `plugin/` loading. `make
+ci` does not run it -- `make e2e` does, and it needs `deno` and `nvim`.
+
+```bash
 make e2e                                               # End-to-end test in a real headless neovim
 ```
 
-Tests never launch vim. `tests/stubs/vim.py` makes `import vim` resolve at
-collection time, and the `vim` fixture monkeypatches `interface.vim` with
-`tests.fakevim.FakeVim` -- a fake of the windows, buffers, tab-local variables
-and undo history the plugin actually uses. Add to the fake when the plugin
-starts using a new part of the vim API.
-
-The one exception is `tests/e2e/`, a deno test that drives a real headless
-neovim through denops.vim to cover the vimscript entry points and `pythonx/`
-loading. `make ci` does not run it -- `make e2e` does, and it needs `deno`,
-`nvim` and `pynvim`. See `tests/e2e/README.md`.
-
 ### Code Quality
 ```bash
-make lint   # Check code with ruff and ast-grep
-make fix    # Auto-fix ruff issues and strip comments/docstrings
-make type   # Type check with mypy (strict mode)
-make radon  # Check cyclomatic complexity and maintainability
-make ci     # Run all CI checks (test + lint + type + radon + vulture)
+make lint        # Check code with selene, stylua, and ast-grep
+make fix         # Strip comments (ast-grep) and format (stylua)
+make type        # Type check with lua-language-server (strict diagnostics)
+make complexity  # Check cyclomatic complexity and function length
+make ci          # Run all CI checks (test + lint + type + complexity)
 ```
 
 **Before completing any feature**, run `make ci` to ensure all checks pass.
@@ -54,18 +56,17 @@ make ci     # Run all CI checks (test + lint + type + radon + vulture)
 
 Writing guidance:
 
-- Only include a brief description of the thing in docstrings (no arguments or return types)
-- Do not use docstrings at the beginning of files.
-
-New entry points called only from vimscript must be added to
-`.vulture-whitelist.py`, or vulture will fail CI on them as dead code.
+- No comments. Use `---@param`/`---@return`/`---@class` annotations on every public function; no `---` prose lines.
+- Modules return a local table `M`; no globals.
+- `require` calls at the top of the file only.
 
 ## Project Structure
 
 ```
-autoload/            # vimscript entry points
 plugin/              # :DiffEarlier / :DiffLater / :DiffSearch definitions
-pythonx/diffundo/    # Main package source code
-tests/               # Test files
+lua/diffundo/        # Main package source code
+spec/                # busted tests (mirror lua/diffundo/ structure, named *_spec.lua)
+tests/e2e/           # deno + denops.vim end-to-end test against a real neovim
+types/               # ---@meta stubs for lua-language-server (busted globals, the vim API used)
 docs/adr/            # Architecture Decision Records
 ```

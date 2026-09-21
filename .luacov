@@ -1,0 +1,5 @@
+return {
+  include = { "^lua/" },
+  runreport = true,
+  deletestats = true,
+}

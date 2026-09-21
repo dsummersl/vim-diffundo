@@ -4,6 +4,8 @@ vim-diffundo
 Open a vertical diffsplit against a files undo history, and quickly pull changes
 from your undo history into your current buffer.
 
+Requires neovim 0.10 or newer.
+
 Installation
 ------------
 
@@ -21,8 +23,8 @@ Commands
 *:DiffSearch <needle>*: search your undo history for the addition of `<needle>` and open a vertical diffsplit against that undo version and your current buffer.
 
 The diff window is labelled with the timestamp and sequence number of the undo
-state it shows. The label is set as that window's `'statusline'` and, in neovim,
-its `'winbar'`, so it stays visible even with `laststatus=3`.
+state it shows. The label is set as that window's `'statusline'` and
+`'winbar'`, so it stays visible even with `laststatus=3`.
 
 Setup
 -----
@@ -53,20 +55,21 @@ Without vim-repeat the commands still work, `.` just won't repeat them.
 Development
 -----------
 
-The python half of the plugin lives in `pythonx/diffundo` and is tested against
-a fake `vim` module, so no vim process is needed:
+Requires `lua`, `luarocks`, `stylua`, `selene`, `ast-grep`, `lua-language-server`, and `jq` on `PATH`.
 
     make setup
     make ci
 
-`make ci` runs pytest (with coverage), ruff, ast-grep, mypy, radon and vulture.
+The plugin lives in `lua/diffundo` and is tested with busted against a fake of
+the neovim API, so no editor process is needed. `make ci` runs busted (with
+coverage), selene, stylua, ast-grep, lua-language-server and a complexity check.
 
-The vimscript half is covered by a separate end-to-end test that drives a real
+The commands are also covered by a separate end-to-end test that drives a real
 headless neovim through [denops.vim](https://github.com/vim-denops/denops.vim):
 
     make e2e
 
-It needs `deno`, `nvim` and `pynvim`; see `tests/e2e/README.md`.
+It needs `deno` and `nvim`.
 
 Architecture Decision Records live in `docs/adr`; see `AGENTS.md` for the
 day-to-day commands.

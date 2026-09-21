@@ -1,0 +1,11 @@
+id: no-require-in-function-lua
+language: lua
+severity: error
+message: Keep require() calls at the top of the file, not inside a function.
+rule:
+  pattern: require($MOD)
+  inside:
+    any:
+      - kind: function_declaration
+      - kind: function_definition
+    stopBy: end
