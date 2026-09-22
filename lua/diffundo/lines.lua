@@ -52,4 +52,17 @@ function M.index_of(lines, line)
   return nil
 end
 
+---@param regex vim.regex
+---@param candidates string[]
+---@return string|nil, integer|nil
+function M.first_match(regex, candidates)
+  for _, line in ipairs(candidates) do
+    local col = regex:match_str(line)
+    if col then
+      return line, col
+    end
+  end
+  return nil
+end
+
 return M

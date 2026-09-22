@@ -1,6 +1,7 @@
 local count = require("diffundo.count")
 local cursor = require("diffundo.cursor")
 local lines = require("diffundo.lines")
+local pattern = require("diffundo.pattern")
 local restore = require("diffundo.restore")
 local split = require("diffundo.split")
 local subcommand = require("diffundo.subcommand")
@@ -66,11 +67,9 @@ end
 ---@return diffundo.Hit|nil
 local function match_in(regex, step, removed)
   local candidates = removed and step.removed or step.added
-  for _, line in ipairs(candidates) do
-    local col = regex:match_str(line)
-    if col then
-      return hit_for(step, line, col, removed)
-    end
+  local line, col = lines.first_match(regex, candidates)
+  if line and col then
+    return hit_for(step, line, col, removed)
   end
   return nil
 end
@@ -88,18 +87,6 @@ local function find(regex, from_seq, removed)
     end
   end
   return nil
-end
-
----@param pattern string
----@return string
-local function with_case_flag(pattern)
-  if not vim.o.ignorecase then
-    return "\\C" .. pattern
-  end
-  if vim.o.smartcase and pattern:find("%u") then
-    return "\\C" .. pattern
-  end
-  return "\\c" .. pattern
 end
 
 ---@param amount string|nil
@@ -124,12 +111,12 @@ function M.later(amount)
   end)
 end
 
----@param pattern string
+---@param needle string
 ---@param opts diffundo.SearchOpts|nil
 ---@return diffundo.Hit|nil
-function M.search(pattern, opts)
+function M.search(needle, opts)
   return cursor_neutral(function()
-    local regex = vim.regex(with_case_flag(pattern))
+    local regex = pattern.compile(needle)
     local was_open = split.is_open()
     if not split.open() then
       return nil
