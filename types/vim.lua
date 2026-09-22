@@ -8,6 +8,7 @@
 ---@class vim.fn
 ---@field changenr fun(): integer
 ---@field undotree fun(): vim.undotree
+---@field input fun(prompt: any): string
 ---@field [string] fun(...): any
 
 ---@class vim.api
@@ -23,6 +24,12 @@
 ---@field nvim_buf_get_lines fun(buffer: integer, start: integer, stop: integer, strict: boolean): string[]
 ---@field nvim_buf_set_lines fun(buffer: integer, start: integer, stop: integer, strict: boolean, lines: string[])
 ---@field nvim_buf_set_name fun(buffer: integer, name: string)
+---@field nvim_create_buf fun(scratch: boolean, listed: boolean): integer
+---@field nvim_open_win fun(buffer: integer, enter: boolean, config: table): integer
+---@field nvim_win_close fun(window: integer, force: boolean)
+---@field nvim_win_set_config fun(window: integer, config: table)
+---@field nvim_buf_set_keymap fun(buffer: integer, mode: string, lhs: string, rhs: string, opts: table)
+---@field nvim_buf_delete fun(buffer: integer, opts: table)
 ---@field nvim_create_user_command fun(name: string, command: fun(opts: { args: string }), opts: table)
 
 ---@class vim.bo
@@ -46,6 +53,7 @@
 ---@class vim.o
 ---@field ignorecase boolean
 ---@field smartcase boolean
+---@field lines integer
 
 ---@class vim.keymap
 ---@field set fun(mode: string, lhs: string, rhs: string|fun(), opts: table)

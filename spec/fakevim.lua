@@ -263,6 +263,38 @@ local function api(self)
     nvim_buf_set_name = function(_, name)
       current_buffer(self).name = name
     end,
+    nvim_create_buf = function()
+      return new_buffer(self)
+    end,
+    nvim_open_win = function(buf, enter, config)
+      local win = self.next_win
+      self.next_win = win + 1
+      self.windows[win] = { buf = buf, options = {}, cursor = { 1, 0 }, config = config or {} }
+      table.insert(self.win_order, win)
+      if enter then
+        self.current_win = win
+      end
+      return win
+    end,
+    nvim_win_close = function(win)
+      self:close_window(win)
+    end,
+    nvim_win_set_config = function(win, config)
+      local found = window(self, win)
+      for key, value in pairs(config) do
+        found.config[key] = value
+      end
+    end,
+    nvim_buf_set_keymap = function(buf, mode, lhs, _, opts)
+      if mode ~= "n" then
+        return
+      end
+      self.keymaps[buf] = self.keymaps[buf] or {}
+      self.keymaps[buf][lhs] = opts.callback
+    end,
+    nvim_buf_delete = function(buf)
+      self.buffers[buf] = nil
+    end,
   }
 end
 
@@ -306,8 +338,10 @@ function M.new(history, opts)
   self.next_win = 1000
   self.notifications = {}
   self.commands = {}
+  self.g = {}
+  self.keymaps = {}
   self.t = {}
-  self.o = { ignorecase = false, smartcase = false }
+  self.o = { ignorecase = false, smartcase = false, lines = 40 }
   self.log = { levels = { ERROR = 4, INFO = 2 } }
 
   self.source_bn = new_buffer(self, history:lines(), options.name or "source.lua")
@@ -331,6 +365,9 @@ function M.new(history, opts)
   end
   self.notify = function(message)
     table.insert(self.notifications, message)
+  end
+  self.fn.input = function()
+    return ""
   end
   self.keycode = function(keys)
     return keys
@@ -399,6 +436,16 @@ end
 -- selene: allow(global_usage)
 function Fake:install()
   _G.vim = self
+end
+
+---@param keys string
+function Fake:press(keys)
+  local buf = current_buffer(self).number
+  local map = self.keymaps[buf] and self.keymaps[buf][keys]
+  if map == nil then
+    error("no keymap for " .. keys .. " in buffer " .. buf, 0)
+  end
+  map()
 end
 
 ---@return string
