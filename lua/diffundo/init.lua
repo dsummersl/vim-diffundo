@@ -3,6 +3,7 @@ local cursor = require("diffundo.cursor")
 local lines = require("diffundo.lines")
 local pattern = require("diffundo.pattern")
 local restore = require("diffundo.restore")
+local sidebar = require("diffundo.sidebar")
 local split = require("diffundo.split")
 local subcommand = require("diffundo.subcommand")
 local walker = require("diffundo.walker")
@@ -137,6 +138,10 @@ end
 ---@param sub diffundo.Subcommand
 ---@return diffundo.Hit|nil
 local function dispatch(sub)
+  if sub.name == "history" then
+    sidebar.toggle()
+    return nil
+  end
   if sub.name == "earlier" then
     M.earlier(sub.rest)
     return nil
@@ -173,22 +178,70 @@ end
 local last_args
 
 ---@param args string
+local function notify_unknown(args)
+  local head = args:match("^%s*(%S*)") or ""
+  vim.notify(
+    ('diffundo: unknown subcommand "%s" (%s)'):format(head, table.concat(subcommand.names, ", "))
+  )
+end
+
+---@param hit diffundo.Hit|nil
+---@return integer|nil
+local function reveal_search(hit)
+  if hit == nil then
+    return nil
+  end
+  return hit.seq
+end
+
+---@param sub diffundo.Subcommand
+---@return integer|nil
+local function reveal_diff(sub)
+  if sub.no_history then
+    return nil
+  end
+  if vim.g.diffundo_history == false then
+    return nil
+  end
+  if split.is_open() then
+    return vim.t.diffundo_diff_undonr
+  end
+  return nil
+end
+
+---@param sub diffundo.Subcommand
+---@param hit diffundo.Hit|nil
+---@return integer|nil
+local function reveal_from(sub, hit)
+  if sub.name == "search" then
+    return reveal_search(hit)
+  end
+  if sub.name == "history" then
+    return nil
+  end
+  return reveal_diff(sub)
+end
+
+---@param args string
 function M.command(args)
   last_args = args
   pcall(vim.fn["repeat#set"], vim.keycode("<Plug>(DiffundoRepeat)"))
   local sub = subcommand.parse(args)
   if sub == nil then
-    local head = args:match("^%s*(%S*)") or ""
-    vim.notify(
-      ('diffundo: unknown subcommand "%s" (%s)'):format(head, table.concat(subcommand.names, ", "))
-    )
+    notify_unknown(args)
     return
   end
   local ok, hit = pcall(dispatch, sub)
   if not ok then
     vim.notify("diffundo: " .. tostring(hit))
-  elseif sub.name == "search" then
+    return
+  end
+  if sub.name == "search" then
     finish_search(sub, hit)
+  end
+  local seq = reveal_from(sub, hit)
+  if seq then
+    sidebar.reveal(seq)
   end
 end
 
