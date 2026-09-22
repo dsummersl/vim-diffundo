@@ -16,6 +16,10 @@
 ---@field nvim_tabpage_list_wins fun(tabpage: integer): integer[]
 ---@field nvim_win_get_buf fun(window: integer): integer
 ---@field nvim_set_current_win fun(window: integer)
+---@field nvim_get_current_win fun(): integer
+---@field nvim_win_is_valid fun(window: integer): boolean
+---@field nvim_win_get_cursor fun(window: integer): integer[]
+---@field nvim_win_set_cursor fun(window: integer, pos: integer[])
 ---@field nvim_get_current_buf fun(): integer
 ---@field nvim_buf_is_valid fun(buffer: integer): boolean
 ---@field nvim_buf_get_lines fun(buffer: integer, start: integer, stop: integer, strict: boolean): string[]
@@ -44,6 +48,9 @@
 ---@class vim.keymap
 ---@field set fun(mode: string, lhs: string, rhs: string|fun(), opts: table)
 
+---@class vim.regex
+---@field match_str fun(self: vim.regex, str: string): integer|nil, integer|nil
+
 ---@class vim
 ---@field fn vim.fn
 ---@field api vim.api
@@ -56,4 +63,5 @@
 ---@field cmd fun(command: string)
 ---@field notify fun(message: string, level?: integer)
 ---@field keycode fun(keys: string): string
+---@field regex fun(pattern: string): vim.regex
 vim = {}

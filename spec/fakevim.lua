@@ -17,24 +17,46 @@ History.__index = History
 ---@param times integer[]|nil
 function M.history(states, times)
   local self = setmetatable({}, History)
-  self.states = {}
-  self.times = {}
+  self.entries = {}
   for index, lines in ipairs(states) do
-    self.states[index] = copy(lines)
-    self.times[index] = times and times[index] or 1627784659 + (index - 1) * 60
+    local seq = index - 1
+    self.entries[seq] = {
+      lines = copy(lines),
+      parent = math.max(0, seq - 1),
+      time = times and times[index] or 1627784659 + seq * 60,
+    }
   end
-  self.seq = #states - 1
+  self.seq_last = #states - 1
+  self.seq = self.seq_last
   return self
+end
+
+---@param parent integer
+---@param lines string[]
+---@param opts { time?: integer, save?: integer }|nil
+---@return integer
+function History:branch(parent, lines, opts)
+  local options = opts or {}
+  local seq = self.seq_last + 1
+  self.entries[seq] = {
+    lines = copy(lines),
+    parent = parent,
+    time = options.time or (1627784659 + seq * 60),
+    save = options.save,
+  }
+  self.seq_last = seq
+  self.seq = seq
+  return seq
 end
 
 ---@return string[]
 function History:lines()
-  return self.states[self.seq + 1]
+  return self.entries[self.seq].lines
 end
 
 ---@param seq integer
 function History:undo(seq)
-  self.seq = math.max(0, math.min(seq, #self.states - 1))
+  self.seq = math.max(0, math.min(seq, self.seq_last))
 end
 
 ---@param count integer
@@ -47,12 +69,53 @@ function History:later(count)
   self:undo(self.seq + count)
 end
 
-function History:undotree()
-  local entries = {}
-  for index = 2, #self.states do
-    table.insert(entries, { seq = index - 1, time = self.times[index] })
+---@param self table
+---@param parent integer
+---@return integer[]
+local function children(self, parent)
+  local result = {}
+  for seq = self.seq_last, 1, -1 do
+    if self.entries[seq].parent == parent then
+      table.insert(result, seq)
+    end
   end
-  return { seq_last = #self.states - 1, seq_cur = self.seq, entries = entries }
+  return result
+end
+
+---@param list integer[]
+---@return integer[]
+local function tail(list)
+  local result = {}
+  for index = 2, #list do
+    result[index - 1] = list[index]
+  end
+  return result
+end
+
+---@param self table
+---@param seq integer
+---@param siblings integer[]
+---@return table[]
+local function chain(self, seq, siblings)
+  local entry = self.entries[seq]
+  local head = { seq = seq, time = entry.time, save = entry.save }
+  if siblings[1] then
+    head.alt = chain(self, siblings[1], tail(siblings))
+  end
+  local list = { head }
+  local kids = children(self, seq)
+  if kids[1] then
+    for _, item in ipairs(chain(self, kids[1], tail(kids))) do
+      table.insert(list, item)
+    end
+  end
+  return list
+end
+
+function History:undotree()
+  local kids = children(self, 0)
+  local entries = kids[1] and chain(self, kids[1], tail(kids)) or {}
+  return { seq_last = self.seq_last, seq_cur = self.seq, entries = entries }
 end
 
 local Fake = {}
@@ -127,7 +190,8 @@ local function commands(self)
       end
       local win = self.next_win
       self.next_win = win + 1
-      self.windows[win] = { buf = self.windows[self.current_win].buf, options = {} }
+      self.windows[win] =
+        { buf = self.windows[self.current_win].buf, options = {}, cursor = { 1, 0 } }
       table.insert(self.win_order, 1, win)
       self.current_win = win
     end,
@@ -148,9 +212,33 @@ local function run_command(self, command)
 end
 
 ---@param self table
+---@param win integer
+---@return table
+local function window(self, win)
+  local resolved = win == 0 and self.current_win or win
+  local found = self.windows[resolved]
+  if found == nil then
+    error("Invalid window id: " .. tostring(win), 0)
+  end
+  return found
+end
+
+---@param self table
 ---@return table
 local function api(self)
   return {
+    nvim_get_current_win = function()
+      return self.current_win
+    end,
+    nvim_win_is_valid = function(win)
+      return self.windows[win] ~= nil
+    end,
+    nvim_win_get_cursor = function(win)
+      return copy(window(self, win).cursor)
+    end,
+    nvim_win_set_cursor = function(win, pos)
+      window(self, win).cursor = { pos[1], pos[2] }
+    end,
     nvim_tabpage_list_wins = function()
       return copy(self.win_order)
     end,
@@ -233,7 +321,7 @@ function M.new(history, opts)
   self.buffers[self.source_bn].options.filetype = options.filetype or "lua"
   local win = self.next_win
   self.next_win = win + 1
-  self.windows[win] = { buf = self.source_bn, options = {} }
+  self.windows[win] = { buf = self.source_bn, options = {}, cursor = { 1, 0 } }
   self.win_order = { win }
   self.current_win = win
 
@@ -253,6 +341,18 @@ function M.new(history, opts)
   end
   self.keycode = function(keys)
     return keys
+  end
+  self.regex = function(pattern)
+    local literal = pattern:gsub("^\\V", "")
+    return {
+      match_str = function(_, line)
+        local start, stop = line:find(literal, 1, true)
+        if start == nil then
+          return nil
+        end
+        return start - 1, stop
+      end,
+    }
   end
   return self
 end
