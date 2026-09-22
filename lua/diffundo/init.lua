@@ -1,6 +1,8 @@
 local count = require("diffundo.count")
+local cursor = require("diffundo.cursor")
 local lines = require("diffundo.lines")
 local split = require("diffundo.split")
+local subcommand = require("diffundo.subcommand")
 local walker = require("diffundo.walker")
 
 local M = {}
@@ -13,11 +15,11 @@ local M = {}
 ---@return T
 local function cursor_neutral(fn)
   local win = vim.api.nvim_get_current_win()
-  local cursor = vim.api.nvim_win_get_cursor(win)
+  local pos = vim.api.nvim_win_get_cursor(win)
   local ok, result = pcall(fn)
   if vim.api.nvim_win_is_valid(win) then
     vim.api.nvim_set_current_win(win)
-    pcall(vim.api.nvim_win_set_cursor, win, cursor)
+    pcall(vim.api.nvim_win_set_cursor, win, pos)
   end
   if not ok then
     error(result, 0)
@@ -147,11 +149,68 @@ function M.search(pattern, opts)
   end)
 end
 
----@param args string
-function M.command(args)
-  vim.notify("diffundo: " .. args)
+---@param sub diffundo.Subcommand
+---@return diffundo.Hit|nil
+local function dispatch(sub)
+  if sub.name == "earlier" then
+    M.earlier(sub.rest)
+    return nil
+  end
+  if sub.name == "later" then
+    M.later(sub.rest)
+    return nil
+  end
+  if sub.rest == "" then
+    error("search needs a pattern", 0)
+  end
+  return M.search(sub.rest, { removed = sub.bang })
 end
 
-function M.repeat_last() end
+---@param hit diffundo.Hit
+local function place_cursor(hit)
+  split.focus(true)
+  local lnum, col = cursor.locate(current_lines(), hit)
+  vim.api.nvim_win_set_cursor(0, { lnum, col })
+end
+
+---@param sub diffundo.Subcommand
+---@param hit diffundo.Hit|nil
+local function finish_search(sub, hit)
+  if hit then
+    place_cursor(hit)
+  elseif split.is_open() then
+    local verb = sub.bang and "removes" or "adds"
+    vim.notify(("diffundo: no state %s a line matching %s"):format(verb, sub.rest))
+  end
+end
+
+---@type string|nil
+local last_args
+
+---@param args string
+function M.command(args)
+  last_args = args
+  pcall(vim.fn["repeat#set"], vim.keycode("<Plug>(DiffundoRepeat)"))
+  local sub = subcommand.parse(args)
+  if sub == nil then
+    local head = args:match("^%s*(%S*)") or ""
+    vim.notify(
+      ('diffundo: unknown subcommand "%s" (%s)'):format(head, table.concat(subcommand.names, ", "))
+    )
+    return
+  end
+  local ok, hit = pcall(dispatch, sub)
+  if not ok then
+    vim.notify("diffundo: " .. tostring(hit))
+  elseif sub.name == "search" then
+    finish_search(sub, hit)
+  end
+end
+
+function M.repeat_last()
+  if last_args then
+    M.command(last_args)
+  end
+end
 
 return M

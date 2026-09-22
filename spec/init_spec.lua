@@ -1,6 +1,8 @@
-local diffundo = require("diffundo")
+local fresh = require
 local fakevim = require("spec.fakevim")
 local split = require("diffundo.split")
+
+local diffundo
 
 local function three_states()
   return fakevim.history({ {}, { "first" }, { "first", "second" }, { "first", "second", "third" } })
@@ -12,6 +14,8 @@ describe("diffundo", function()
   before_each(function()
     vim = fakevim.new(three_states())
     vim:install()
+    package.loaded["diffundo"] = nil
+    diffundo = fresh("diffundo")
   end)
 
   describe("earlier", function()
@@ -251,8 +255,8 @@ describe("diffundo", function()
       )
       vim:install()
 
-      assert.are.equal(4, diffundo.search("x").seq)
-      assert.are.equal(2, diffundo.search("x").seq)
+      assert.are.equal(4, assert(diffundo.search("x")).seq)
+      assert.are.equal(2, assert(diffundo.search("x")).seq)
       assert.is_nil(diffundo.search("x"))
     end)
 
@@ -280,7 +284,7 @@ describe("diffundo", function()
       vim = fakevim.new(fakevim.history({ {}, { "xx needle" } }))
       vim:install()
 
-      assert.are.equal(3, diffundo.search("needle").col)
+      assert.are.equal(3, assert(diffundo.search("needle")).col)
     end)
 
     it("returns nil for a buffer without undo history", function()
@@ -301,6 +305,143 @@ describe("diffundo", function()
       end, "Vim:E54: Unmatched \\(")
       assert.is_nil(vim.t.diffundo_diff_bn)
       assert.are.same({}, vim.commands)
+    end)
+  end)
+
+  describe("command", function()
+    it("dispatches earlier with its count", function()
+      diffundo.command("earlier 2")
+
+      assert.are.same({ "first" }, vim:diff_buffer().lines)
+      assert.are.equal(1, vim.t.diffundo_diff_undonr)
+    end)
+
+    it("dispatches later", function()
+      diffundo.command("earlier 2")
+      diffundo.command("later")
+
+      assert.are.equal(2, vim.t.diffundo_diff_undonr)
+    end)
+
+    it("reports an unknown subcommand", function()
+      diffundo.command("nonesuch 1")
+
+      assert.are.equal(
+        'diffundo: unknown subcommand "nonesuch" (earlier, later, search, search!)',
+        vim:last_notification()
+      )
+    end)
+
+    it("reports a missing subcommand", function()
+      diffundo.command("")
+
+      assert.matches('unknown subcommand ""', vim:last_notification())
+    end)
+
+    it("reports an invalid count", function()
+      diffundo.command("earlier 1w")
+
+      assert.matches("^diffundo: invalid count: 1w", vim:last_notification())
+    end)
+
+    it("reports a vim error", function()
+      split.open()
+      vim.history.earlier = function()
+        error("Vim(earlier):E475: Invalid argument", 0)
+      end
+
+      diffundo.command("earlier")
+
+      assert.are.equal("diffundo: Vim(earlier):E475: Invalid argument", vim:last_notification())
+    end)
+
+    it("requires a pattern for search", function()
+      diffundo.command("search")
+
+      assert.are.equal("diffundo: search needs a pattern", vim:last_notification())
+      assert.is_nil(vim.t.diffundo_diff_bn)
+    end)
+
+    it("moves the source cursor onto the match", function()
+      vim = fakevim.new(
+        fakevim.history({ {}, { "a" }, { "a", "xx needle" }, { "a", "xx needle", "b" } })
+      )
+      vim:install()
+
+      diffundo.command("search needle")
+
+      local source_win = vim:window_of_buffer(vim.source_bn)
+      assert.are.equal(source_win, vim.current_win)
+      assert.are.same({ 2, 3 }, vim.windows[source_win].cursor)
+    end)
+
+    it("falls back to the old line number when the line is gone", function()
+      vim = fakevim.new(fakevim.history({ {}, { "a" }, { "a", "b" }, { "a" } }))
+      vim:install()
+
+      diffundo.command("search! b")
+
+      assert.are.same({ 1, 0 }, vim.windows[vim:window_of_buffer(vim.source_bn)].cursor)
+      assert.are.equal(3, vim.t.diffundo_diff_undonr)
+    end)
+
+    it("reports no match for additions and removals", function()
+      diffundo.command("search nonesuch")
+      assert.are.equal("diffundo: no state adds a line matching nonesuch", vim:last_notification())
+
+      diffundo.command("search! nonesuch")
+      assert.are.equal(
+        "diffundo: no state removes a line matching nonesuch",
+        vim:last_notification()
+      )
+    end)
+
+    it("does not double-report a buffer without undo history", function()
+      vim = fakevim.new(fakevim.history({ {} }))
+      vim:install()
+
+      diffundo.command("search x")
+
+      assert.are.same({ "No changes to view!" }, vim.notifications)
+    end)
+  end)
+
+  describe("repeat_last", function()
+    it("does nothing before any command ran", function()
+      diffundo.repeat_last()
+
+      assert.are.equal(0, #vim.commands)
+    end)
+
+    it("replays the last command with its arguments", function()
+      diffundo.command("earlier 1")
+      diffundo.repeat_last()
+
+      assert.are.same({ "first" }, vim:diff_buffer().lines)
+      assert.are.equal(1, vim.t.diffundo_diff_undonr)
+    end)
+
+    it("registers with vim-repeat when it is installed", function()
+      local registered = {}
+      vim.fn["repeat#set"] = function(keys)
+        table.insert(registered, keys)
+      end
+
+      diffundo.command("search second")
+
+      assert.are.same({ "<Plug>(DiffundoRepeat)" }, registered)
+    end)
+
+    it("registers with vim-repeat again on every repeat", function()
+      local registered = 0
+      vim.fn["repeat#set"] = function()
+        registered = registered + 1
+      end
+
+      diffundo.command("earlier 1")
+      diffundo.repeat_last()
+
+      assert.are.equal(2, registered)
     end)
   end)
 end)
