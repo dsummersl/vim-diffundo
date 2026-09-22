@@ -1,0 +1,68 @@
+*diffundo.txt*  Diff your buffer against its undo history
+
+==============================================================================
+CONTENTS                                                     *diffundo-contents*
+
+  1. Command ..................................... |:Diffundo|
+  2. Lua API ..................................... |diffundo-api|
+  3. Repeating ................................... |diffundo-repeat|
+
+==============================================================================
+1. COMMAND                                                          *:Diffundo*
+
+:Diffundo earlier [count]                                  *:Diffundo-earlier*
+    Open (or update) a vertical diff split showing the buffer as it was
+    after |:earlier| [count]. [count] is anything |:earlier| accepts:
+    `3`, `10s`, `2f` ... Default `1`. Relative to the state the split
+    already shows, so repeating it walks further back.
+
+:Diffundo later [count]                                      *:Diffundo-later*
+    The same for |:later|.
+
+:Diffundo search {pattern}                                  *:Diffundo-search*
+    Find the undo state whose edit added a line matching {pattern}, show
+    it in the diff split, and move the cursor to the match in your buffer
+    (or to where the line was, if it is gone). {pattern} is a Vim regex:
+    'ignorecase', 'smartcase' and 'magic' apply as for |/|. The search
+    register |quote/| is not changed. Repeat to find the next older state.
+
+:Diffundo search! {pattern}
+    The same for a line that was removed.
+
+    Search compares each undo state with the state it was edited from
+    (its parent in the undo tree, see |undo-branches|), so switching
+    branches never counts as an addition or removal.
+
+The diff window's 'statusline' and 'winbar' show the timestamp and
+sequence number (|changenr()|) of the state it displays.
+
+==============================================================================
+2. LUA API                                                        *diffundo-api*
+
+All functions leave the current window and cursor unchanged and raise
+errors instead of printing them. >lua
+
+    local diffundo = require("diffundo")
+    diffundo.earlier(count)            -- count: string|nil, as :earlier
+    diffundo.later(count)
+    diffundo.search(pattern, opts)     -- opts.removed = true for search!
+<
+`search` returns nil when nothing matches, otherwise a table: >
+    { seq, time, save, line, col, lnum }
+<
+`seq` is the state shown in the split, `line` the matched text, `col` the
+0-based match column and `lnum` the line's number in the state that had it.
+
+`require("diffundo.walker").steps(from_seq)` returns an iterator over undo
+states with seq below `from_seq`, newest first, each `{ seq, parent,
+time, save, lines, parent_lines, added, removed }`. It runs |:undo| in the
+current buffer, so call it with the source buffer current and restore
+afterwards.
+
+==============================================================================
+3. REPEATING                                                   *diffundo-repeat*
+
+With tpope/vim-repeat installed, |.| runs the last :Diffundo command
+again with the same arguments.
+
+ vim:tw=78:ts=8:ft=help:norl:
