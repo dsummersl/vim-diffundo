@@ -3,6 +3,7 @@ local M = {}
 ---@class diffundo.UndoEntry
 ---@field seq integer
 ---@field time integer
+---@field save integer|nil
 ---@field alt diffundo.UndoEntry[]|nil
 
 ---@param entries diffundo.UndoEntry[]
