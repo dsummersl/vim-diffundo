@@ -472,6 +472,22 @@ describe("the history float from commands", function()
     assert.is_nil(vim.t.diffundo_history_win)
   end)
 
+  it("the -no-history flag leaves the float closed for a search hit", function()
+    diffundo.command("-no-history search first")
+
+    assert.are.equal(1, vim.t.diffundo_diff_undonr)
+    assert.is_nil(vim.t.diffundo_history_win)
+  end)
+
+  it("the g:diffundo_history option leaves the float closed for a search hit", function()
+    vim.g.diffundo_history = false
+
+    diffundo.command("search first")
+
+    assert.are.equal(1, vim.t.diffundo_diff_undonr)
+    assert.is_nil(vim.t.diffundo_history_win)
+  end)
+
   it("reveals a search hit at its row", function()
     diffundo.command("search first")
 

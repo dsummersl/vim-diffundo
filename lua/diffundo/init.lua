@@ -194,15 +194,8 @@ local function reveal_search(hit)
   return hit.seq
 end
 
----@param sub diffundo.Subcommand
 ---@return integer|nil
-local function reveal_diff(sub)
-  if sub.no_history then
-    return nil
-  end
-  if vim.g.diffundo_history == false then
-    return nil
-  end
+local function reveal_diff()
   if split.is_open() then
     return vim.t.diffundo_diff_undonr
   end
@@ -213,13 +206,16 @@ end
 ---@param hit diffundo.Hit|nil
 ---@return integer|nil
 local function reveal_from(sub, hit)
+  if sub.no_history or vim.g.diffundo_history == false then
+    return nil
+  end
   if sub.name == "search" then
     return reveal_search(hit)
   end
   if sub.name == "history" then
     return nil
   end
-  return reveal_diff(sub)
+  return reveal_diff()
 end
 
 ---@param args string
