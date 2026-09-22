@@ -1,6 +1,7 @@
 local count = require("diffundo.count")
 local cursor = require("diffundo.cursor")
 local lines = require("diffundo.lines")
+local restore = require("diffundo.restore")
 local split = require("diffundo.split")
 local subcommand = require("diffundo.subcommand")
 local walker = require("diffundo.walker")
@@ -27,21 +28,6 @@ local function cursor_neutral(fn)
   return result
 end
 
----@param fn fun()
-local function within_source(fn)
-  split.focus(true)
-  local undonr = vim.fn.changenr()
-
-  local ok, err = pcall(fn)
-
-  split.focus(true)
-  vim.cmd("silent undo " .. undonr)
-  vim.cmd("diffupdate")
-  if not ok then
-    error(err, 0)
-  end
-end
-
 ---@return string[]
 local function current_lines()
   return vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -50,7 +36,7 @@ end
 ---@param command string
 ---@param amount string
 local function early_late(command, amount)
-  within_source(function()
+  restore.within_source(function()
     vim.cmd("silent undo " .. vim.t.diffundo_diff_undonr)
     vim.cmd("silent " .. command .. " " .. amount)
     split.place(current_lines(), vim.fn.changenr())
@@ -151,7 +137,7 @@ function M.search(pattern, opts)
     local from_seq = was_open and vim.t.diffundo_diff_undonr or vim.fn.changenr() + 1
     ---@type diffundo.Hit|nil
     local hit
-    within_source(function()
+    restore.within_source(function()
       hit = find(regex, from_seq, opts ~= nil and opts.removed == true)
     end)
     if hit == nil then
