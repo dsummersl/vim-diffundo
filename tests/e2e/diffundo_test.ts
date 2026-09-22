@@ -44,6 +44,37 @@ async function buildHistory(denops: Denops, states: string[][]): Promise<void> {
   }
 }
 
+// Records `lines` as one undo state even when it is shorter than the buffer.
+async function setState(denops: Denops, lines: string[]): Promise<void> {
+  const quoted = lines.map((l) => `'${l.replaceAll("'", "''")}'`).join(", ");
+  // WHY: RPC calls bracket their own undo block, so the shrink must run
+  // inside a single :undojoin'd command.
+  await denops.cmd(`call setline(1, [${quoted}])`);
+  await denops.cmd(`silent undojoin | call deletebufline("%", ${lines.length + 1}, "$")`);
+  await denops.cmd("let &undolevels = &undolevels");
+}
+
+async function assertCursor(
+  denops: Denops,
+  expected: { lnum: number; col: number },
+): Promise<void> {
+  // WHY: the command must leave the user in their own buffer, not the diff.
+  assertEquals(await denops.eval("&buftype"), "");
+  assertEquals(await denops.eval("[line('.'), col('.')]"), [
+    expected.lnum,
+    expected.col,
+  ]);
+}
+
+async function assertNoMatch(denops: Denops, verb: string, pattern: string): Promise<void> {
+  const messages = await denops.call("execute", "messages") as string;
+  assert(
+    messages.includes(`diffundo: no state ${verb} a line matching ${pattern}`),
+    messages,
+  );
+  await denops.cmd("messages clear");
+}
+
 async function windowStates(denops: Denops): Promise<WindowState[]> {
   return await denops.eval(
     "map(range(1, winnr('$')), {_, w -> {" +
@@ -111,10 +142,10 @@ async function assertSourceAlone(
 
 test({
   mode: "nvim",
-  name: ":DiffEarlier opens a diff split against the previous undo state",
+  name: ":Diffundo earlier opens a diff split against the previous undo state",
   prelude,
   fn: async (denops) => {
-    assertEquals(await denops.call("exists", ":DiffEarlier"), 2);
+    assertEquals(await denops.call("exists", ":Diffundo"), 2);
 
     await denops.cmd("enew");
     await buildHistory(denops, [["one"], ["one", "two"], [
@@ -123,7 +154,7 @@ test({
       "three",
     ]]);
 
-    await denops.cmd("DiffEarlier");
+    await denops.cmd("Diffundo earlier");
 
     await assertDiffSplit(denops, {
       undoLines: ["one", "two"],
@@ -135,7 +166,7 @@ test({
 
 test({
   mode: "nvim",
-  name: ":only after :DiffEarlier leaves the source buffer at its latest state",
+  name: ":only after :Diffundo earlier leaves the source buffer at its latest state",
   prelude,
   fn: async (denops) => {
     await denops.cmd("enew");
@@ -145,7 +176,7 @@ test({
       "three",
     ]]);
 
-    await denops.cmd("DiffEarlier");
+    await denops.cmd("Diffundo earlier");
     await denops.cmd("only");
 
     await assertSourceAlone(denops, {
@@ -154,7 +185,7 @@ test({
     });
 
     // WHY: the split must reopen cleanly rather than trip over the stale t: vars.
-    await denops.cmd("DiffEarlier");
+    await denops.cmd("Diffundo earlier");
 
     await assertDiffSplit(denops, {
       undoLines: ["one", "two"],
@@ -173,7 +204,7 @@ test({
 
 test({
   mode: "nvim",
-  name: ":DiffEarlier {count} steps back that many undo states",
+  name: ":Diffundo earlier {count} steps back that many undo states",
   prelude,
   fn: async (denops) => {
     await denops.cmd("enew");
@@ -184,7 +215,7 @@ test({
       ["one", "two", "three", "four"],
     ]);
 
-    await denops.cmd("DiffEarlier 2");
+    await denops.cmd("Diffundo earlier 2");
 
     await assertDiffSplit(denops, {
       undoLines: ["one", "two"],
@@ -193,7 +224,7 @@ test({
     });
 
     // WHY: a second call walks further back from the state the split shows.
-    await denops.cmd("DiffEarlier");
+    await denops.cmd("Diffundo earlier");
 
     await assertDiffSplit(denops, {
       undoLines: ["one"],
@@ -212,7 +243,7 @@ test({
 
 test({
   mode: "nvim",
-  name: ":DiffEarlier {N}f steps back to the state of an earlier file write",
+  name: ":Diffundo earlier {N}f steps back to the state of an earlier file write",
   prelude,
   fn: async (denops) => {
     const path = await denops.call("tempname") as string;
@@ -224,7 +255,7 @@ test({
     await denops.cmd("write");
     await appendState(denops, ["one", "two", "three"]);
 
-    await denops.cmd("DiffEarlier 1f");
+    await denops.cmd("Diffundo earlier 1f");
 
     await assertDiffSplit(denops, {
       undoLines: ["one", "two"],
@@ -239,7 +270,7 @@ test({
       changenr: 3,
     });
 
-    await denops.cmd("DiffEarlier 2f");
+    await denops.cmd("Diffundo earlier 2f");
 
     await assertDiffSplit(denops, {
       undoLines: ["one"],
@@ -265,7 +296,7 @@ async function pressDot(denops: Denops): Promise<void> {
 
 test({
   mode: "nvim",
-  name: "`.` repeats the last :DiffEarlier through vim-repeat",
+  name: "`.` repeats the last :Diffundo earlier through vim-repeat",
   prelude,
   fn: async (denops) => {
     // WHY: vim-repeat has no plugin/ file, so only its autoload script proves
@@ -280,7 +311,7 @@ test({
       ["one", "two", "three", "four"],
     ]);
 
-    await denops.cmd("DiffEarlier");
+    await denops.cmd("Diffundo earlier");
     await pressDot(denops);
 
     await assertDiffSplit(denops, {
@@ -301,7 +332,7 @@ test({
 
 test({
   mode: "nvim",
-  name: "`.` repeats :DiffEarlier 1f from one file write to the previous one",
+  name: "`.` repeats :Diffundo earlier 1f from one file write to the previous one",
   prelude,
   fn: async (denops) => {
     const path = await denops.call("tempname") as string;
@@ -313,13 +344,147 @@ test({
     await denops.cmd("write");
     await appendState(denops, ["one", "two", "three"]);
 
-    await denops.cmd("DiffEarlier 1f");
+    await denops.cmd("Diffundo earlier 1f");
     await pressDot(denops);
 
     await assertDiffSplit(denops, {
       undoLines: ["one"],
       sourceLines: ["one", "two", "three"],
       undonr: 1,
+    });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":Diffundo search shows the state that added the line and puts the cursor on it",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["one"], ["one", "xx two"], [
+      "one",
+      "xx two",
+      "three",
+    ]]);
+
+    await denops.cmd("Diffundo search two");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one", "xx two"],
+      sourceLines: ["one", "xx two", "three"],
+      undonr: 2,
+    });
+    await assertCursor(denops, { lnum: 2, col: 4 });
+    assertEquals(await denops.eval("@/"), "");
+
+    // WHY: the label and t:diffundo_diff_undonr agree, so earlier steps once.
+    await denops.cmd("Diffundo earlier");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one"],
+      sourceLines: ["one", "xx two", "three"],
+      undonr: 1,
+    });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":Diffundo search! shows the state that removed the line",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await setState(denops, ["a"]);
+    await setState(denops, ["a", "b"]);
+    await setState(denops, ["a"]);
+
+    await denops.cmd("Diffundo search! b");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["a"],
+      sourceLines: ["a"],
+      undonr: 3,
+    });
+    await assertCursor(denops, { lnum: 1, col: 1 });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":Diffundo search diffs each state against its parent across undo branches",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await setState(denops, ["one"]);
+    await setState(denops, ["one", "two"]);
+    await denops.cmd("silent undo 1");
+    await setState(denops, ["one", "three"]);
+    assertEquals(await denops.call("changenr"), 3);
+
+    // WHY: no edit removed "two"; a chronological walk would blame seq 3.
+    await denops.cmd("Diffundo search! two");
+    await assertNoMatch(denops, "removes", "two");
+
+    await denops.cmd("only");
+    await denops.cmd("Diffundo search two");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["one", "two"],
+      sourceLines: ["one", "three"],
+      undonr: 2,
+    });
+    await assertCursor(denops, { lnum: 2, col: 1 });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":Diffundo search follows 'ignorecase' and 'smartcase' like /",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("set ignorecase smartcase");
+    await denops.cmd("enew");
+    await buildHistory(denops, [["x"], ["x", "Foo"]]);
+
+    await denops.cmd("Diffundo search foo");
+
+    await assertDiffSplit(denops, {
+      undoLines: ["x", "Foo"],
+      sourceLines: ["x", "Foo"],
+      undonr: 2,
+    });
+
+    await denops.cmd("only");
+    await denops.cmd("Diffundo search FOO");
+    await assertNoMatch(denops, "adds", "FOO");
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "`.` repeats :Diffundo search to the next older match",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["a"], ["a", "x"], ["a", "x", "b"], [
+      "a",
+      "x",
+      "b",
+      "x",
+    ]]);
+
+    await denops.cmd("Diffundo search x");
+    await assertDiffSplit(denops, {
+      undoLines: ["a", "x", "b", "x"],
+      sourceLines: ["a", "x", "b", "x"],
+      undonr: 4,
+    });
+
+    await pressDot(denops);
+    await assertDiffSplit(denops, {
+      undoLines: ["a", "x"],
+      sourceLines: ["a", "x", "b", "x"],
+      undonr: 2,
     });
   },
 });

@@ -104,6 +104,18 @@ local function find(regex, from_seq, removed)
   return nil
 end
 
+---@param pattern string
+---@return string
+local function with_case_flag(pattern)
+  if not vim.o.ignorecase then
+    return "\\C" .. pattern
+  end
+  if vim.o.smartcase and pattern:find("%u") then
+    return "\\C" .. pattern
+  end
+  return "\\c" .. pattern
+end
+
 ---@param amount string|nil
 function M.earlier(amount)
   cursor_neutral(function()
@@ -131,7 +143,7 @@ end
 ---@return diffundo.Hit|nil
 function M.search(pattern, opts)
   return cursor_neutral(function()
-    local regex = vim.regex(pattern)
+    local regex = vim.regex(with_case_flag(pattern))
     local was_open = split.is_open()
     if not split.open() then
       return nil

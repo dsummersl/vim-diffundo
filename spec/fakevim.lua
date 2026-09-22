@@ -307,6 +307,7 @@ function M.new(history, opts)
   self.notifications = {}
   self.commands = {}
   self.t = {}
+  self.o = { ignorecase = false, smartcase = false }
   self.log = { levels = { ERROR = 4, INFO = 2 } }
 
   self.source_bn = new_buffer(self, history:lines(), options.name or "source.lua")
@@ -335,10 +336,13 @@ function M.new(history, opts)
     return keys
   end
   self.regex = function(pattern)
-    local literal = pattern:gsub("^\\V", "")
+    local literal = pattern:gsub("^\\[VcC]", "")
+    local insensitive = pattern:match("^\\c") ~= nil
     return {
       match_str = function(_, line)
-        local start, stop = line:find(literal, 1, true)
+        local haystack = insensitive and line:lower() or line
+        local needle = insensitive and literal:lower() or literal
+        local start, stop = haystack:find(needle, 1, true)
         if start == nil then
           return nil
         end

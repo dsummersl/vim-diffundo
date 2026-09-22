@@ -43,6 +43,10 @@
 ---@class vim.log
 ---@field levels { ERROR: integer, INFO: integer }
 
+---@class vim.o
+---@field ignorecase boolean
+---@field smartcase boolean
+
 ---@class vim.keymap
 ---@field set fun(mode: string, lhs: string, rhs: string|fun(), opts: table)
 
@@ -54,6 +58,7 @@
 ---@field api vim.api
 ---@field bo vim.bo
 ---@field wo vim.wo
+---@field o vim.o
 ---@field t table<string, any>
 ---@field g table<string, any>
 ---@field log vim.log
