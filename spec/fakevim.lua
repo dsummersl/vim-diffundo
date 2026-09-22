@@ -276,13 +276,6 @@ local function fn(self)
     undotree = function()
       return self.history:undotree()
     end,
-    escape = function(text)
-      return text
-    end,
-    search = function(pattern)
-      table.insert(self.searches, pattern)
-      return 1
-    end,
   }
 end
 
@@ -313,7 +306,6 @@ function M.new(history, opts)
   self.next_win = 1000
   self.notifications = {}
   self.commands = {}
-  self.searches = {}
   self.t = {}
   self.log = { levels = { ERROR = 4, INFO = 2 } }
 

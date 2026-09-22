@@ -8,8 +8,6 @@
 ---@class vim.fn
 ---@field changenr fun(): integer
 ---@field undotree fun(): vim.undotree
----@field escape fun(text: string, chars: string): string
----@field search fun(pattern: string): integer
 ---@field [string] fun(...): any
 
 ---@class vim.api

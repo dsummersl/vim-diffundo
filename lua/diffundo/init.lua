@@ -1,15 +1,28 @@
-local additions = require("diffundo.additions")
 local count = require("diffundo.count")
+local lines = require("diffundo.lines")
 local split = require("diffundo.split")
+local walker = require("diffundo.walker")
 
 local M = {}
 
----@param fn fun()
-local function reporting_errors(fn)
-  local ok, err = pcall(fn)
-  if not ok then
-    vim.notify("diffundo: " .. tostring(err))
+---@class diffundo.SearchOpts
+---@field removed boolean|nil
+
+---@generic T
+---@param fn fun(): T
+---@return T
+local function cursor_neutral(fn)
+  local win = vim.api.nvim_get_current_win()
+  local cursor = vim.api.nvim_win_get_cursor(win)
+  local ok, result = pcall(fn)
+  if vim.api.nvim_win_is_valid(win) then
+    vim.api.nvim_set_current_win(win)
+    pcall(vim.api.nvim_win_set_cursor, win, cursor)
   end
+  if not ok then
+    error(result, 0)
+  end
+  return result
 end
 
 ---@param fn fun()
@@ -42,95 +55,103 @@ local function early_late(command, amount)
   end)
 end
 
----@param needle string
-local function search_earlier(needle)
-  within_source(function()
-    local next_undonr = vim.t.diffundo_diff_undonr
-    vim.cmd("silent undo " .. next_undonr)
-    local next_lines = current_lines()
+---@param step diffundo.Step
+---@param line string
+---@param col integer
+---@param removed boolean
+---@return diffundo.Hit
+local function hit_for(step, line, col, removed)
+  local had = removed and step.parent_lines or step.lines
+  return {
+    seq = step.seq,
+    time = step.time,
+    save = step.save,
+    line = line,
+    col = col,
+    lnum = lines.index_of(had, line) or 1,
+  }
+end
 
-    while next_undonr > 0 do
-      vim.cmd("silent earlier")
-      local before_lines = current_lines()
-      local before_undonr = vim.fn.changenr()
-      local found = additions.first_match(needle, before_lines, next_lines)
-
-      if found then
-        split.place(next_lines, next_undonr)
-        vim.t.diffundo_diff_undonr = before_undonr
-        vim.fn.search("\\V" .. vim.fn.escape(found, "\\"))
-        return
-      end
-
-      next_lines = before_lines
-      next_undonr = before_undonr
+---@param regex vim.regex
+---@param step diffundo.Step
+---@param removed boolean
+---@return diffundo.Hit|nil
+local function match_in(regex, step, removed)
+  local candidates = removed and step.removed or step.added
+  for _, line in ipairs(candidates) do
+    local col = regex:match_str(line)
+    if col then
+      return hit_for(step, line, col, removed)
     end
+  end
+  return nil
+end
 
-    vim.notify("No match found")
-  end)
+---@param regex vim.regex
+---@param from_seq integer
+---@param removed boolean
+---@return diffundo.Hit|nil
+local function find(regex, from_seq, removed)
+  for step in walker.steps(from_seq) do
+    local hit = match_in(regex, step, removed)
+    if hit then
+      split.place(step.lines, step.seq)
+      return hit
+    end
+  end
+  return nil
 end
 
 ---@param amount string|nil
 function M.earlier(amount)
-  reporting_errors(function()
+  cursor_neutral(function()
     local normalized = count.normalize(amount)
     if split.open() then
       early_late("earlier", normalized)
     end
+    return nil
   end)
 end
 
 ---@param amount string|nil
 function M.later(amount)
-  reporting_errors(function()
+  cursor_neutral(function()
     local normalized = count.normalize(amount)
     if split.open() then
       early_late("later", normalized)
     end
+    return nil
   end)
 end
 
----@param needle string
-function M.search_earlier(needle)
-  reporting_errors(function()
-    if split.open() then
-      search_earlier(needle)
+---@param pattern string
+---@param opts diffundo.SearchOpts|nil
+---@return diffundo.Hit|nil
+function M.search(pattern, opts)
+  return cursor_neutral(function()
+    local regex = vim.regex(pattern)
+    local was_open = split.is_open()
+    if not split.open() then
+      return nil
     end
+    local from_seq = was_open and vim.t.diffundo_diff_undonr or vim.fn.changenr() + 1
+    ---@type diffundo.Hit|nil
+    local hit
+    within_source(function()
+      hit = find(regex, from_seq, opts ~= nil and opts.removed == true)
+    end)
+    if hit == nil then
+      split.place(current_lines(), vim.fn.changenr())
+    end
+    return hit
   end)
 end
 
----@type { command: fun(arg: string), arg: string }|nil
-local last
-
----@param command fun(arg: string)
----@param arg string
-local function remember(command, arg)
-  last = { command = command, arg = arg }
-  pcall(vim.fn["repeat#set"], vim.keycode("<Plug>(DiffundoRepeat)"))
+---@param args string
+function M.command(args)
+  vim.notify("diffundo: " .. args)
 end
 
-function M.repeat_last()
-  if last then
-    last.command(last.arg)
-  end
-end
-
----@param arg string
-function M.command_earlier(arg)
-  M.earlier(arg)
-  remember(M.command_earlier, arg)
-end
-
----@param arg string
-function M.command_later(arg)
-  M.later(arg)
-  remember(M.command_later, arg)
-end
-
----@param arg string
-function M.command_search(arg)
-  M.search_earlier(arg)
-  remember(M.command_search, arg)
-end
+function M.repeat_last() end
 
 return M

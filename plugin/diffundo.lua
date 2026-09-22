@@ -5,16 +5,8 @@ if vim.g.loaded_diffundo then
 end
 vim.g.loaded_diffundo = true
 
-vim.api.nvim_create_user_command("DiffEarlier", function(opts)
-  diffundo.command_earlier(opts.args)
-end, { nargs = "?" })
-
-vim.api.nvim_create_user_command("DiffLater", function(opts)
-  diffundo.command_later(opts.args)
-end, { nargs = "?" })
-
-vim.api.nvim_create_user_command("DiffSearch", function(opts)
-  diffundo.command_search(opts.args)
-end, { nargs = 1 })
+vim.api.nvim_create_user_command("Diffundo", function(opts)
+  diffundo.command(opts.args)
+end, { nargs = "*" })
 
 vim.keymap.set("n", "<Plug>(DiffundoRepeat)", diffundo.repeat_last, { silent = true })

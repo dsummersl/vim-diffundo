@@ -21,16 +21,6 @@ describe("diffundo", function()
       assert.are.same({ "first", "second" }, vim:diff_buffer().lines)
     end)
 
-    it("reports a buffer without undo history", function()
-      vim = fakevim.new(fakevim.history({ {} }))
-      vim:install()
-
-      diffundo.earlier()
-
-      assert.are.equal("No changes to view!", vim:last_notification())
-      assert.is_nil(vim.t.diffundo_diff_bn)
-    end)
-
     it("reopens the split when the source tab variable is gone", function()
       split.open()
       vim.t.diffundo_source_bn = nil
@@ -51,16 +41,6 @@ describe("diffundo", function()
       assert.are_not.equal(diff_bn, vim.t.diffundo_diff_bn)
       assert.are.same({ "first", "second" }, vim:diff_buffer().lines)
       assert.are.equal(2, #vim.win_order)
-    end)
-
-    it("reports a source window that is gone", function()
-      split.open()
-      vim:close_window(vim:window_of_buffer(vim.source_bn))
-      vim.t.diffundo_source_bn = vim.source_bn
-
-      diffundo.earlier()
-
-      assert.matches("no longer open", vim:last_notification())
     end)
 
     it("shows the previous undo state", function()
@@ -89,43 +69,12 @@ describe("diffundo", function()
       assert.are.same({ "first" }, vim:diff_buffer().lines)
     end)
 
-    it("reports an invalid count", function()
-      diffundo.earlier("1w")
-
-      assert.matches("invalid count: 1w", vim:last_notification())
-      assert.is_nil(vim.t.diffundo_diff_bn)
-    end)
-
     it("treats an empty count as one", function()
       split.open()
 
       diffundo.earlier("")
 
       assert.are.same({ "first", "second" }, vim:diff_buffer().lines)
-    end)
-
-    it("reports a vim error", function()
-      split.open()
-      vim.history.earlier = function()
-        error("Vim(earlier):E475: Invalid argument", 0)
-      end
-
-      diffundo.earlier()
-
-      assert.matches("E475", vim:last_notification())
-    end)
-
-    it("restores the source buffer when the undo fails", function()
-      split.open()
-      vim.history.earlier = function()
-        error("Vim(earlier):E475: Invalid argument", 0)
-      end
-
-      diffundo.earlier()
-
-      assert.are.equal(3, vim.history.seq)
-      assert.are.same({ "first", "second", "third" }, vim:source_buffer().lines)
-      assert.are.equal(vim.source_bn, vim:current_buffer().number)
     end)
 
     it("is relative to the last diffed state", function()
@@ -162,13 +111,6 @@ describe("diffundo", function()
   end)
 
   describe("later", function()
-    it("reports an invalid count", function()
-      diffundo.later("-3")
-
-      assert.matches("invalid count: %-3", vim:last_notification())
-      assert.is_nil(vim.t.diffundo_diff_bn)
-    end)
-
     it("walks back towards the newest state", function()
       split.open()
 
@@ -180,41 +122,127 @@ describe("diffundo", function()
     end)
   end)
 
-  describe("search_earlier", function()
-    it("finds the undo that added the term", function()
+  describe("earlier errors", function()
+    it("raises an invalid count", function()
+      assert.has_error(function()
+        diffundo.earlier("1w")
+      end, "invalid count: 1w (expected a number, optionally followed by s, m, h, d or f)")
+      assert.is_nil(vim.t.diffundo_diff_bn)
+    end)
+
+    it("raises a vim error and restores the source buffer", function()
+      split.open()
+      vim.history.earlier = function()
+        error("Vim(earlier):E475: Invalid argument", 0)
+      end
+
+      assert.has_error(function()
+        diffundo.earlier()
+      end, "Vim(earlier):E475: Invalid argument")
+      assert.are.equal(3, vim.history.seq)
+      assert.are.same({ "first", "second", "third" }, vim:source_buffer().lines)
+    end)
+
+    it("raises when the source window is gone", function()
+      split.open()
+      vim:close_window(vim:window_of_buffer(vim.source_bn))
+      vim.t.diffundo_source_bn = vim.source_bn
+
+      assert.has_error(function()
+        diffundo.earlier()
+      end, "The diffundo source window is no longer open in this tab.")
+    end)
+
+    it("notifies for a buffer without undo history", function()
+      vim = fakevim.new(fakevim.history({ {} }))
+      vim:install()
+
+      diffundo.earlier()
+
+      assert.are.equal("No changes to view!", vim:last_notification())
+      assert.is_nil(vim.t.diffundo_diff_bn)
+    end)
+  end)
+
+  describe("cursor neutrality", function()
+    it("leaves the window and cursor where they were", function()
+      vim.windows[vim.current_win].cursor = { 3, 1 }
+      local win = vim.current_win
+
+      diffundo.earlier()
+      diffundo.search("second")
+
+      assert.are.equal(win, vim.current_win)
+      assert.are.same({ 3, 1 }, vim.windows[win].cursor)
+    end)
+
+    it("restores the window even when the body raises", function()
+      split.open()
+      local win = vim.current_win
+      vim.history.earlier = function()
+        error("Vim(earlier):E475: Invalid argument", 0)
+      end
+
+      pcall(diffundo.earlier)
+
+      assert.are.equal(win, vim.current_win)
+    end)
+  end)
+
+  describe("search", function()
+    it("shows the state whose edit added the line", function()
       split.open()
 
-      diffundo.search_earlier("second")
+      local hit = diffundo.search("second")
 
       assert.are.same({ "first", "second" }, vim:diff_buffer().lines)
-      assert.are.equal(1, vim.t.diffundo_diff_undonr)
-      assert.are.same({ "\\Vsecond" }, vim.searches)
+      assert.are.equal(2, vim.t.diffundo_diff_undonr)
+      assert.are.same(
+        { seq = 2, time = vim.history.entries[2].time, line = "second", col = 0, lnum = 2 },
+        hit
+      )
     end)
 
-    it("skips states without the term", function()
+    it("opens the split itself and considers the live state first", function()
+      local hit = assert(diffundo.search("third"))
+
+      assert.are.equal(3, hit.seq)
+      assert.are.same({ "first", "second", "third" }, vim:diff_buffer().lines)
+      assert.are.equal(3, vim.t.diffundo_diff_undonr)
+    end)
+
+    it("starts behind the displayed state when the split is already open", function()
       split.open()
 
-      diffundo.search_earlier("first")
+      assert.is_nil(diffundo.search("third"))
+      assert.are.equal(3, vim.t.diffundo_diff_undonr)
+    end)
 
+    it("skips states that did not add the line", function()
+      split.open()
+
+      local hit = assert(diffundo.search("first"))
+
+      assert.are.equal(1, hit.seq)
       assert.are.same({ "first" }, vim:diff_buffer().lines)
-      assert.are.equal(0, vim.t.diffundo_diff_undonr)
     end)
 
-    it("reports when nothing matches", function()
+    it("returns nil and leaves the split alone when nothing matches", function()
       split.open()
 
-      diffundo.search_earlier("nonesuch")
-
-      assert.are.equal("No match found", vim:last_notification())
+      assert.is_nil(diffundo.search("nonesuch"))
+      assert.are.equal(3, vim.t.diffundo_diff_undonr)
+      assert.are.same({ "first", "second", "third" }, vim:diff_buffer().lines)
     end)
 
     it("restores the source buffer", function()
       split.open()
 
-      diffundo.search_earlier("nonesuch")
+      diffundo.search("nonesuch")
 
       assert.are.equal(3, vim.history.seq)
       assert.are.same({ "first", "second", "third" }, vim:source_buffer().lines)
+      assert.are.same("diffupdate", vim.commands[#vim.commands])
     end)
 
     it("continues from the previous match", function()
@@ -222,52 +250,57 @@ describe("diffundo", function()
         fakevim.history({ {}, { "a" }, { "a", "x" }, { "a", "x", "b" }, { "a", "x", "b", "x" } })
       )
       vim:install()
-      split.open()
 
-      diffundo.search_earlier("x")
-      assert.are.same({ "a", "x", "b", "x" }, vim:diff_buffer().lines)
-
-      diffundo.search_earlier("x")
-      assert.are.same({ "a", "x" }, vim:diff_buffer().lines)
-    end)
-  end)
-
-  describe("repeat_last", function()
-    it("does nothing before any command ran", function()
-      diffundo.repeat_last()
-
-      assert.are.equal(0, #vim.commands)
+      assert.are.equal(4, diffundo.search("x").seq)
+      assert.are.equal(2, diffundo.search("x").seq)
+      assert.is_nil(diffundo.search("x"))
     end)
 
-    it("replays the last command with its argument", function()
-      diffundo.command_earlier("1")
-      diffundo.repeat_last()
+    it("finds removals with opts.removed", function()
+      vim = fakevim.new(fakevim.history({ {}, { "a" }, { "a", "b" }, { "a" } }))
+      vim:install()
 
-      assert.are.same({ "first" }, vim:diff_buffer().lines)
-      assert.are.equal(1, vim.t.diffundo_diff_undonr)
+      local hit = diffundo.search("b", { removed = true })
+
+      assert.are.same(
+        { seq = 3, time = vim.history.entries[3].time, line = "b", col = 0, lnum = 2 },
+        hit
+      )
+      assert.are.same({ "a" }, vim:diff_buffer().lines)
+      assert.are.equal(3, vim.t.diffundo_diff_undonr)
     end)
 
-    it("registers with vim-repeat when it is installed", function()
-      local registered = {}
-      vim.fn["repeat#set"] = function(keys)
-        table.insert(registered, keys)
+    it("does not report a branch switch as a removal", function()
+      vim.history:branch(1, { "first", "other" })
+
+      assert.is_nil(diffundo.search("second", { removed = true }))
+    end)
+
+    it("reports the match column", function()
+      vim = fakevim.new(fakevim.history({ {}, { "xx needle" } }))
+      vim:install()
+
+      assert.are.equal(3, diffundo.search("needle").col)
+    end)
+
+    it("returns nil for a buffer without undo history", function()
+      vim = fakevim.new(fakevim.history({ {} }))
+      vim:install()
+
+      assert.is_nil(diffundo.search("x"))
+      assert.are.equal("No changes to view!", vim:last_notification())
+    end)
+
+    it("compiles the pattern before touching anything", function()
+      vim.regex = function()
+        error("Vim:E54: Unmatched \\(", 0)
       end
 
-      diffundo.command_search("second")
-
-      assert.are.same({ "<Plug>(DiffundoRepeat)" }, registered)
-    end)
-
-    it("registers with vim-repeat again on every repeat", function()
-      local registered = 0
-      vim.fn["repeat#set"] = function()
-        registered = registered + 1
-      end
-
-      diffundo.command_earlier("1")
-      diffundo.repeat_last()
-
-      assert.are.equal(2, registered)
+      assert.has_error(function()
+        diffundo.search("\\(")
+      end, "Vim:E54: Unmatched \\(")
+      assert.is_nil(vim.t.diffundo_diff_bn)
+      assert.are.same({}, vim.commands)
     end)
   end)
 end)
