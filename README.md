@@ -71,7 +71,8 @@ History sidebar
 `:Diffundo -no-history earlier` (or `g:diffundo_history` = `false`) keeps the
 minimal layout. The float sits in the upper right of the editor by default;
 `g:diffundo_history_width` (default 40) sets its width and
-`g:diffundo_fold_min` (default 3) the minimum run length that folds.
+`g:diffundo_fold_min` (default 3) the fold threshold: runs of consecutive
+same-branch states longer than this collapse into a caption row.
 
 Each row is `<gutter><preview …><time>`: ancestor lanes draw `┊`; the row's own
 lane is `│`, `○`/`◉` when it is the diff's current state (`◉` also saved),
@@ -84,7 +85,7 @@ right-aligned compact relative age (`now`, `2m`, `1h`, `3d`, `2w`, `4mo`,
 Runs of consecutive states on one branch collapse to a caption row
 (`+8 states: +5 -3 lines 8 undos`) — `zo`/`zc` open/fold one run, `zr`/`zm`
 all. A footer under `────` shows the selected state's sequence number,
-save/current meaning, absolute time and change totals, then `shown/total` and
+saved status, absolute time and change totals, then `shown/total` and
 a right-aligned `help: g?` hint; `g?` in the sidebar notifies this key list.
 The float's rows come from `require("diffundo.history").rows`, the same list
 the future telescope/quickfix front-ends reuse.
