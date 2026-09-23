@@ -31,6 +31,10 @@
 ---@field nvim_buf_set_keymap fun(buffer: integer, mode: string, lhs: string, rhs: string, opts: table)
 ---@field nvim_buf_delete fun(buffer: integer, opts: table)
 ---@field nvim_create_user_command fun(name: string, command: fun(opts: { args: string }), opts: table)
+---@field nvim_create_namespace fun(name: string): integer
+---@field nvim_buf_add_highlight fun(buffer: integer, ns_id: integer, hl_group: string, line: integer, col_start: integer, col_end: integer)
+---@field nvim_buf_clear_namespace fun(buffer: integer, ns_id: integer)
+---@field nvim_buf_call fun(buffer: integer, fn: fun())
 
 ---@class vim.bo
 ---@field filetype string
@@ -44,6 +48,8 @@
 ---@field scrollbind boolean
 ---@field cursorbind boolean
 ---@field foldmethod string
+---@field foldlevel integer
+---@field foldtext string
 ---@field statusline string
 ---@field winbar string
 

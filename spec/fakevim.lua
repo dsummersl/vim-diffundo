@@ -195,6 +195,12 @@ local function commands(self)
       table.insert(self.win_order, 1, win)
       self.current_win = win
     end,
+    fold = function(_, first, last)
+      self.folds[#self.folds + 1] = { first = tonumber(first), last = tonumber(last) }
+    end,
+    delfold = function()
+      self.folds = {}
+    end,
   }
 end
 
@@ -204,11 +210,21 @@ local function run_command(self, command)
   table.insert(self.commands, command)
   local stripped = command:gsub("^silent ", "")
   local head, rest = stripped:match("^(%S+)%s*(.*)$")
+  local range_first, range_last
+  local name = head:match("^(%d+),(%d+)%a+$")
+  if name then
+    range_first, range_last, head = head:match("^(%d+),(%d+)(%a+)$")
+  else
+    head = head:match("^%%(%a+)$") and head:sub(2) or head
+    if head == "delfold" then
+      range_first, range_last = 1, -1
+    end
+  end
   local handler = commands(self)[head]
   if handler == nil then
     error("unsupported command: " .. command, 0)
   end
-  handler(rest)
+  handler(rest, range_first, range_last)
 end
 
 ---@param self table
@@ -295,6 +311,34 @@ local function api(self)
     nvim_buf_delete = function(buf)
       self.buffers[buf] = nil
     end,
+    nvim_create_namespace = function(name)
+      return name
+    end,
+    nvim_buf_add_highlight = function(buf, ns, hl, line, col_start, col_end)
+      self.highlights[#self.highlights + 1] = {
+        buf = buf,
+        ns = ns,
+        hl = hl,
+        line = line,
+        col_start = col_start,
+        col_end = col_end,
+      }
+    end,
+    nvim_buf_clear_namespace = function()
+      self.highlights = {}
+    end,
+    nvim_buf_call = function(buf, fn)
+      local win = window_of_buffer(self, buf)
+      local saved = self.current_win
+      if win then
+        self.current_win = win
+      end
+      local ok, err = pcall(fn)
+      self.current_win = saved
+      if not ok then
+        error(err, 0)
+      end
+    end,
   }
 end
 
@@ -342,6 +386,8 @@ function M.new(history, opts)
   self.keymaps = {}
   self.t = {}
   self.o = { ignorecase = false, smartcase = false, lines = 40, columns = 80 }
+  self.highlights = {}
+  self.folds = {}
   self.log = { levels = { ERROR = 4, INFO = 2 } }
 
   self.source_bn = new_buffer(self, history:lines(), options.name or "source.lua")

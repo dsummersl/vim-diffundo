@@ -91,3 +91,43 @@ describe("window.close and window.is_open", function()
     assert.is_nil(vim.buffers[buf])
   end)
 end)
+
+describe("fake: highlight and fold APIs", function()
+  it("records highlights and clears the namespace", function()
+    local vim = fakevim.new(fakevim.history({ {}, { "a" } }))
+    vim:install()
+    local ns = vim.api.nvim_create_namespace("diffundo")
+    vim.api.nvim_buf_add_highlight(vim.source_bn, ns, "DiffAdd", 0, 2, 5)
+    vim.api.nvim_buf_add_highlight(vim.source_bn, ns, "Bold", 1, 0, 10)
+    assert.are.equal(2, #vim.highlights)
+
+    vim.api.nvim_buf_clear_namespace()
+
+    assert.are.equal(0, #vim.highlights)
+  end)
+
+  it("records fold and delfold commands", function()
+    local vim = fakevim.new(fakevim.history({ {}, { "a" } }))
+    vim:install()
+    vim.cmd("4,9fold")
+    assert.are.same({ { first = 4, last = 9 } }, vim.folds)
+
+    vim.cmd("%delfold")
+    assert.are.same({}, vim.folds)
+  end)
+
+  it("nvim_buf_call runs with the buffer's window current", function()
+    local vim = fakevim.new(fakevim.history({ {}, { "a" } }))
+    vim:install()
+    local buf = vim.api.nvim_create_buf(false, true)
+    local win = vim.api.nvim_open_win(buf, false, {})
+    assert.are_not.equal(win, vim.current_win)
+
+    local seen
+    vim.api.nvim_buf_call(buf, function()
+      seen = vim.current_win
+    end)
+
+    assert.are.equal(win, seen)
+  end)
+end)
