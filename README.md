@@ -26,12 +26,14 @@ One command, `:Diffundo`, with subcommands (tab-completes):
 
 *:Diffundo search! {pattern}* : the same for a line that was **removed**.
 
-*:Diffundo history* : toggle the floating history sidebar — one line per undo
-state with a one-line preview of what that edit changed.
+*:Diffundo history* : toggle the floating history sidebar — the undo tree as
+a gutter of branch lanes, a one-line preview of what each edit changed, and
+the age right-aligned. Runs of consecutive states fold into a caption row.
 
 In the sidebar: *j*/*k* move by change (or use counts, *gg*/*G*), *J*/*K* move
 between written states, *<cr>* shows the selected state in the diff split,
-*/* filters the list (vim regex, empty to clear), *q*/*<esc>* closes it.
+*/* filters the list (vim regex, empty to clear), *g?* notifies this key map,
+*q*/*<esc>* closes it.
 
 Search walks the undo *tree*: each state is compared with the state it was
 edited from, so switching undo branches never shows up as a change.
@@ -68,9 +70,24 @@ History sidebar
 `:Diffundo earlier/later/search` open the history float by default;
 `:Diffundo -no-history earlier` (or `g:diffundo_history` = `false`) keeps the
 minimal layout. The float sits in the upper right of the editor by default;
-`g:diffundo_history_width` (default 40) sets its width. The float's rows come
-from `require("diffundo.history").rows`, the same list the future
-telescope/quickfix front-ends reuse.
+`g:diffundo_history_width` (default 40) sets its width and
+`g:diffundo_fold_min` (default 3) the minimum run length that folds.
+
+Each row is `<gutter><preview …><time>`: ancestor lanes draw `┊`; the row's own
+lane is `│`, `○`/`◉` when it is the diff's current state (`◉` also saved),
+`●` when saved, `├┐`/`├┬┐` where a fork splits onto alternate branches, and
+`└` closing the tree's last lane. The preview shows a single changed line
+(`+ <line>`, `- <line>`) or counts like `+2 -1 lines`; the time column is
+right-aligned compact relative age (`now`, `2m`, `1h`, `3d`, `2w`, `4mo`,
+`2y`).
+
+Runs of consecutive states on one branch collapse to a caption row
+(`+8 states: +5 -3 lines 8 undos`) — `zo`/`zc` open/fold one run, `zr`/`zm`
+all. A footer under `────` shows the selected state's sequence number,
+save/current meaning, absolute time and change totals, then `shown/total` and
+a right-aligned `help: g?` hint; `g?` in the sidebar notifies this key list.
+The float's rows come from `require("diffundo.history").rows`, the same list
+the future telescope/quickfix front-ends reuse.
 
 Setup
 -----
