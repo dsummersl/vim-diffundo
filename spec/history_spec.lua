@@ -186,6 +186,17 @@ describe("history.display", function()
     return base
   end
 
+  local function cell_width(s)
+    local width = 0
+    for i = 1, #s do
+      local b = s:byte(i)
+      if b < 0x80 or b >= 0xC0 then
+        width = width + 1
+      end
+    end
+    return width
+  end
+
   it("renders a linear chain with flat gutters and right-aligned time", function()
     local rows = {
       row({ seq = 3, parent = 2, time = os.time() - 120, added = { "foo()" } }),
@@ -246,11 +257,34 @@ describe("history.display", function()
     assert.matches("^└", display.lines[6])
   end)
 
-  it("nests a branch off an alternate and passes under open lanes", function()
+  it("keeps a long branch chain on one lane like the builtin undotree", function()
     local rows = {
-      row({ seq = 8, parent = 5 }),
+      row({ seq = 8, parent = 4 }),
       row({ seq = 7, parent = 6 }),
-      row({ seq = 6, parent = 4 }),
+      row({ seq = 6, parent = 5 }),
+      row({ seq = 5, parent = 4 }),
+      row({ seq = 4, parent = 3 }),
+      row({ seq = 3, parent = 2 }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { width = 30, fold_min = 9 })
+
+    assert.matches("^│", display.lines[1])
+    assert.matches("^┊│", display.lines[2])
+    assert.matches("^┊│", display.lines[3])
+    assert.matches("^┊│", display.lines[4])
+    assert.matches("^├┐", display.lines[5])
+    assert.matches("^│", display.lines[6])
+    assert.matches("^│", display.lines[7])
+    assert.matches("^└", display.lines[8])
+  end)
+
+  it("nests an alternate of an alternate to a third lane with pass-through", function()
+    local rows = {
+      row({ seq = 7, parent = 4 }),
+      row({ seq = 8, parent = 5 }),
+      row({ seq = 6, parent = 5 }),
       row({ seq = 5, parent = 4 }),
       row({ seq = 4, parent = 3 }),
       row({ seq = 3, parent = 2 }),
@@ -261,12 +295,7 @@ describe("history.display", function()
 
     assert.matches("^│", display.lines[1])
     assert.matches("^┊┊│", display.lines[2])
-    assert.matches("^┊│", display.lines[3])
-    assert.matches("^│", display.lines[4])
     assert.matches("^├┐", display.lines[5])
-    assert.matches("^│", display.lines[6])
-    assert.matches("^│", display.lines[7])
-    assert.matches("^└", display.lines[8])
   end)
 
   it("keeps the newest chain on lane 1 when the trunk child is not first", function()
@@ -307,7 +336,7 @@ describe("history.display", function()
       row({ seq = 2, parent = 1 }),
       row({ seq = 1, parent = 0 }),
     }
-    local display = history.display(rows, { width = 30, fold_min = 3 })
+    local display = history.display(rows, { width = 40, fold_min = 3 })
 
     assert.matches("%+5 states: %+0 %-0 lines 5 undos", display.lines[1])
     assert.are.same({ { start = 1, stop = 5 } }, display.folds)
@@ -368,7 +397,7 @@ describe("history.display", function()
       row({ seq = 1, parent = 0 }),
       { seq = 0, time = 0, save = nil, added = {}, removed = {}, parent = 0, label = "" },
     }
-    local display = history.display(rows, { width = 30, fold_min = 3, total = 6 })
+    local display = history.display(rows, { width = 40, fold_min = 3, total = 6 })
 
     assert.matches("%+5 states: %+0 %-0 lines 5 undos", display.lines[1])
     assert.are.same({ { start = 1, stop = 5 } }, display.folds)
@@ -395,5 +424,33 @@ describe("history.display", function()
 
     assert.matches("^#2 ○ ", display.lines[#display.lines - 1])
     assert.not_matches("saved", display.lines[#display.lines - 1])
+  end)
+
+  it("truncates an overflowing preview by cells and keeps the time on the line", function()
+    local rows = {
+      row({ seq = 4, parent = 2, added = { "a very long added line that just keeps going" } }),
+      row({ seq = 3, parent = 2 }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { width = 14 })
+
+    assert.matches("… 2m$", display.lines[1])
+    for _, line in ipairs(display.lines) do
+      assert.is_true(cell_width(line) <= 14, ("line out of width: %q"):format(line))
+    end
+    for _, span in ipairs(display.spans) do
+      assert.is_true(span.line ~= 0, "truncated row must not keep its marks")
+    end
+    assert.matches("^┊│", display.lines[2])
+  end)
+
+  it("truncates a long status line in the footer by cells", function()
+    local rows = { row({ seq = 2, parent = 1, added = { "one" }, removed = { "two", "three" } }) }
+    local display = history.display(rows, { width = 18, selected = 1, current = 2 })
+
+    assert.matches("^#2 ", display.lines[#display.lines - 1])
+    assert.matches("…$", display.lines[#display.lines - 1])
+    assert.matches("help: g%?$", display.lines[#display.lines])
   end)
 end)

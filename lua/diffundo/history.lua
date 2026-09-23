@@ -217,6 +217,25 @@ local function alt_of(kids, trunk, view, target)
   return alt
 end
 
+---@param seq_index table<integer, integer>
+---@param children integer[][]
+---@param trunk table<integer, boolean>
+---@param view diffundo.Row[]
+---@param lane integer[]
+---@param i integer
+---@return integer|nil
+local function branch_lane(seq_index, children, trunk, view, lane, i)
+  local parent = seq_index[view[i].parent]
+  if not parent or not lane[parent] then
+    return nil
+  end
+  local kids = children[parent]
+  if #kids == 1 then
+    return lane[parent]
+  end
+  return lane[parent] + alt_of(kids, trunk, view, i)
+end
+
 ---@param view diffundo.Row[]
 ---@param seq_index table<integer, integer>
 ---@param children integer[][]
@@ -225,16 +244,10 @@ end
 local function lane_for(view, seq_index, children, trunk)
   local lane = {}
   for i = #view, 1, -1 do
-    local r = view[i]
-    if trunk[r.seq] then
+    if view[i].parent == 0 or trunk[view[i].seq] then
       lane[i] = 1
     else
-      local parent = seq_index[r.parent]
-      if parent then
-        if lane[parent] then
-          lane[i] = lane[parent] + alt_of(children[parent], trunk, view, i)
-        end
-      end
+      lane[i] = branch_lane(seq_index, children, trunk, view, lane, i)
     end
   end
   return lane
@@ -454,6 +467,46 @@ local function gutter_for(i, lane, children, open_i, last_row, non_alts, is_curr
   return table.concat(cells, "")
 end
 
+---@param b integer
+---@return boolean
+local function char_start(b)
+  return b < 0x80 or b >= 0xC0
+end
+
+---@param s string
+---@return integer
+local function cell_width(s)
+  local width = 0
+  for i = 1, #s do
+    if char_start(s:byte(i)) then
+      width = width + 1
+    end
+  end
+  return width
+end
+
+---@param s string
+---@param budget integer
+---@return string
+local function truncate_cells(s, budget)
+  if cell_width(s) <= budget then
+    return s
+  end
+  local out = {}
+  local width = 0
+  for i = 1, #s do
+    local b = s:byte(i)
+    if char_start(b) then
+      width = width + 1
+      if width > budget - 1 then
+        break
+      end
+    end
+    out[#out + 1] = s:sub(i, i)
+  end
+  return table.concat(out, "") .. "…"
+end
+
 ---@param view diffundo.Row[]
 ---@param i integer
 ---@param lane integer[]
@@ -470,15 +523,15 @@ local function row_line(view, i, lane, open, children, alts, time_w, width, curr
     gutter_for(i, lane[i], children, open[i], #view, alts[i], r.seq == current, r.save ~= nil)
   local preview, marks = preview_parts(r)
   local time = label.short(r.time)
-  local body_w = width - #gutter - time_w
-  if #preview > body_w then
-    preview = preview:sub(1, body_w - 1) .. "…"
+  local body_w = width - cell_width(gutter) - time_w
+  if cell_width(preview) > body_w then
+    preview = truncate_cells(preview, math.max(0, body_w))
     marks = {}
   end
   local line = gutter
     .. preview
-    .. string.rep(" ", body_w - #preview)
-    .. string.rep(" ", time_w - #time)
+    .. string.rep(" ", math.max(0, body_w - cell_width(preview)))
+    .. string.rep(" ", math.max(0, time_w - cell_width(time)))
     .. time
   local spans = {}
   local base = #gutter
@@ -510,11 +563,14 @@ local function caption_for(view, first, count, lane, open, time_w, width)
   local text = string.format("+%d states: +%d -%d lines %d undos", count, added, removed, count)
   local gutter = gutter_for(first, lane[first], {}, open[first], #view, 0, false, false)
   local time = label.short(view[first].time)
-  local body_w = width - #gutter - time_w
+  local body_w = width - cell_width(gutter) - time_w
+  if cell_width(text) > body_w then
+    text = truncate_cells(text, math.max(0, body_w))
+  end
   return gutter
     .. text
-    .. string.rep(" ", math.max(0, body_w - #text))
-    .. string.rep(" ", math.max(0, time_w - #time))
+    .. string.rep(" ", math.max(0, body_w - cell_width(text)))
+    .. string.rep(" ", math.max(0, time_w - cell_width(time)))
     .. time
 end
 
@@ -560,8 +616,8 @@ local function status_line(r, current, width)
     #r.added,
     #r.removed
   )
-  if #text > width then
-    return text:sub(1, width)
+  if cell_width(text) > width then
+    return truncate_cells(text, math.max(0, width))
   end
   return text
 end
