@@ -436,9 +436,7 @@ test({
       undonr: 2,
     });
     await closeHistory(denops);
-    // WHY: the reveal's undo walk rewinds the source cursor when it rebuilds
-    // the rows, so closing the float shows the top of the source, not the hit.
-    await assertCursor(denops, { lnum: 1, col: 1 });
+    await assertCursor(denops, { lnum: 2, col: 4 });
     assertEquals(await denops.eval("@/"), "");
 
     // WHY: the label and t:diffundo_diff_undonr agree, so earlier steps once.
@@ -499,8 +497,7 @@ test({
       undonr: 2,
     });
     await closeHistory(denops);
-    // WHY: as above, the reveal's undo walk leaves the source cursor at top.
-    await assertCursor(denops, { lnum: 1, col: 1 });
+    await assertCursor(denops, { lnum: 2, col: 1 });
   },
 });
 

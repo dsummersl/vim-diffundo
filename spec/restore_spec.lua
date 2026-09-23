@@ -34,6 +34,19 @@ describe("restore.within_source", function()
     assert.are.equal("diffupdate", vim.commands[#vim.commands])
   end)
 
+  it("restores the source window cursor that the walk clobbers", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    split.open()
+    vim.api.nvim_win_set_cursor(vim.api.nvim_get_current_win(), { 2, 0 })
+
+    restore.within_source(function()
+      vim.api.nvim_win_set_cursor(vim.api.nvim_get_current_win(), { 1, 0 })
+    end)
+
+    assert.are.same({ 2, 0 }, vim.api.nvim_win_get_cursor(vim.api.nvim_get_current_win()))
+  end)
+
   it("restores even when the body raises", function()
     local vim = fakevim.new(history())
     vim:install()
