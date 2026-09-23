@@ -107,6 +107,20 @@ describe("sidebar.reveal and the filter", function()
     assert.are.equal(6, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
     assert.are.same({ 1, 0 }, vim.windows[float_win(vim)].cursor)
   end)
+
+  it("keeps the float rendering when the filter matches nothing", function()
+    vim.fn.input = function()
+      return "zzzz"
+    end
+
+    assert.is_true(pcall(sidebar.filter))
+
+    local buf = vim.buffers[vim.windows[float_win(vim)].buf]
+    assert.matches("^%-%-%-", buf.lines[1])
+    assert.matches("no matches", buf.lines[2])
+    assert.matches("0/3", buf.lines[3])
+    assert.matches("help: g%?", buf.lines[3])
+  end)
 end)
 
 describe("the float's keymaps", function()
@@ -279,5 +293,47 @@ describe("sidebar layout integration", function()
     vim:press("g?")
 
     assert.matches("saved jumps", vim:last_notification())
+  end)
+
+  it("opens a fold when J/K lands inside one", function()
+    local vim = fakevim.new(
+      fakevim.history({ {}, { "a" }, { "a", "b" }, { "a", "b", "c" }, { "a", "b", "c", "d" } })
+    )
+    vim:install()
+    vim.history.entries[3].save = 3
+    split.open()
+    sidebar.open()
+
+    assert.are.equal(1, #vim.folds)
+    sidebar.move_save(1)
+
+    assert.are.same({ 3, 0 }, vim.windows[float_win(vim)].cursor)
+    local opened = false
+    for _, command in ipairs(vim.commands) do
+      if command:match("normal! zv") then
+        opened = true
+      end
+    end
+    assert.is_true(opened)
+  end)
+
+  it("revealing a seq opens the fold around it", function()
+    local vim = fakevim.new(
+      fakevim.history({ {}, { "a" }, { "a", "b" }, { "a", "b", "c" }, { "a", "b", "c", "d" } })
+    )
+    vim:install()
+    sidebar.open()
+
+    assert.are.equal(1, #vim.folds)
+    sidebar.reveal(3)
+
+    assert.are.same({ 3, 0 }, vim.windows[float_win(vim)].cursor)
+    local opened = false
+    for _, command in ipairs(vim.commands) do
+      if command:match("normal! zv") then
+        opened = true
+      end
+    end
+    assert.is_true(opened)
   end)
 end)

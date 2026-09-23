@@ -265,4 +265,65 @@ describe("history.display", function()
     assert.matches("2/4", display.lines[5])
     assert.matches("help: g%?$", display.lines[5])
   end)
+
+  it("renders an empty view with a no-matches footer", function()
+    local display = history.display({}, { width = 30, total = 4 })
+
+    assert.are.equal(1, display.footer_start)
+    assert.matches("^%-%-%-", display.lines[1])
+    assert.matches("no matches", display.lines[2])
+    assert.matches("0/4", display.lines[3])
+    assert.matches("help: g%?$", display.lines[3])
+  end)
+
+  it("never maps the sentinel row to a buffer line", function()
+    local rows = {
+      row({ seq = 2, parent = 1, added = { "x" } }),
+      row({ seq = 1, parent = 0 }),
+      { seq = 0, time = 0, save = nil, added = {}, removed = {}, parent = 0, label = "" },
+    }
+    local display = history.display(rows, { width = 30, total = 3 })
+
+    assert.are.same({ 1, 2 }, display.row_to_line)
+    assert.matches("2/3", display.lines[5])
+    assert.are.equal(5, #display.lines)
+  end)
+
+  it("folds a same-branch chain without counting the older sentinel", function()
+    local rows = {
+      row({ seq = 5, parent = 4 }),
+      row({ seq = 4, parent = 3 }),
+      row({ seq = 3, parent = 2 }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+      { seq = 0, time = 0, save = nil, added = {}, removed = {}, parent = 0, label = "" },
+    }
+    local display = history.display(rows, { width = 30, fold_min = 3, total = 6 })
+
+    assert.matches("%+5 states: %+0 %-0 lines 5 undos", display.lines[1])
+    assert.are.same({ { start = 1, stop = 5 } }, display.folds)
+    assert.are.same({ 2, 3, 4, 5, 6 }, display.row_to_line)
+    assert.matches("5/6", display.lines[#display.lines])
+  end)
+
+  it("shows the current saved state and change totals in the footer", function()
+    local rows = {
+      row({ seq = 3, parent = 2, added = { "x" }, save = 1 }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { width = 60, current = 3, selected = 1 })
+
+    assert.matches("^#3", display.lines[#display.lines - 1])
+    assert.matches("◉ saved", display.lines[#display.lines - 1])
+    assert.matches("%+1 %-0$", display.lines[#display.lines - 1])
+  end)
+
+  it("shows ○ for the plain current state in the footer", function()
+    local rows = { row({ seq = 2, parent = 1 }), row({ seq = 1, parent = 0 }) }
+    local display = history.display(rows, { width = 60, current = 2, selected = 1 })
+
+    assert.matches("^#2 ○ ", display.lines[#display.lines - 1])
+    assert.not_matches("saved", display.lines[#display.lines - 1])
+  end)
 end)

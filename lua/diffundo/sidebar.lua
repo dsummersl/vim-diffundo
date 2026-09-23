@@ -140,12 +140,21 @@ local function to_line(index)
   return display and display.row_to_line[index] or index
 end
 
+---@param float integer
+---@param line integer
+local function reveal_line(float, line)
+  vim.api.nvim_win_set_cursor(float, { line, 0 })
+  vim.api.nvim_win_call(float, function()
+    vim.cmd("silent! normal! zv")
+  end)
+end
+
 ---@param seq integer|nil
 local function select_row(seq)
   local index = index_of_seq(seq)
   local float = win()
   if index and float then
-    vim.api.nvim_win_set_cursor(float, { to_line(index), 0 })
+    reveal_line(float, to_line(index))
   end
 end
 
@@ -242,7 +251,7 @@ function M.move_save(dir)
   local index = index_at_line(vim.api.nvim_win_get_cursor(float)[1])
   local moved = history.next(view(), index, { dir = dir, written = true })
   if moved ~= index then
-    vim.api.nvim_win_set_cursor(float, { to_line(moved), 0 })
+    reveal_line(float, to_line(moved))
   end
 end
 

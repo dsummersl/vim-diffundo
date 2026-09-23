@@ -14,6 +14,7 @@
 ---@class vim.api
 ---@field nvim_tabpage_list_wins fun(tabpage: integer): integer[]
 ---@field nvim_win_get_buf fun(window: integer): integer
+---@field nvim_win_call fun(window: integer, fn: fun())
 ---@field nvim_set_current_win fun(window: integer)
 ---@field nvim_get_current_win fun(): integer
 ---@field nvim_win_is_valid fun(window: integer): boolean

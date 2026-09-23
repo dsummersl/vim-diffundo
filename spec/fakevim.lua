@@ -213,7 +213,7 @@ end
 ---@param command string
 local function run_command(self, command)
   table.insert(self.commands, command)
-  local stripped = command:gsub("^silent ", "")
+  local stripped = command:gsub("^silent!? ", "")
   local head, rest = stripped:match("^(%S+)%s*(.*)$")
   local range_first, range_last
   local name = head:match("^(%d+),(%d+)%a+$")
@@ -338,6 +338,15 @@ local function api(self)
       if win then
         self.current_win = win
       end
+      local ok, err = pcall(fn)
+      self.current_win = saved
+      if not ok then
+        error(err, 0)
+      end
+    end,
+    nvim_win_call = function(win, fn)
+      local saved = self.current_win
+      self.current_win = win
       local ok, err = pcall(fn)
       self.current_win = saved
       if not ok then

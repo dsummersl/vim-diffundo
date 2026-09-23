@@ -139,7 +139,9 @@ end
 function M.time_width(view)
   local longest = 1
   for _, row in ipairs(view) do
-    longest = math.max(longest, #label.short(row.time))
+    if row.seq ~= 0 then
+      longest = math.max(longest, #label.short(row.time))
+    end
   end
   return longest + 1
 end
@@ -327,13 +329,34 @@ local function clamp_index(index, size)
 end
 
 ---@param r diffundo.Row
----@param preview string
+---@param current integer|nil
+---@return string
+local function meaning_for(r, current)
+  if current == r.seq then
+    if r.save then
+      return "◉ saved"
+    end
+    return "○"
+  end
+  if r.save then
+    return "● saved"
+  end
+  return ""
+end
+
+---@param r diffundo.Row
+---@param current integer|nil
 ---@param width integer
 ---@return string
-local function status_line(r, preview, width)
-  local meaning = r.save and "● saved" or ""
+local function status_line(r, current, width)
   local absolute = os.date("%Y-%m-%d %I:%M:%S %p", r.time)
-  local text = ("#%d %s %s %s"):format(r.seq, meaning, absolute, preview)
+  local text = ("#%d %s %s +%d -%d"):format(
+    r.seq,
+    meaning_for(r, current),
+    absolute,
+    #r.added,
+    #r.removed
+  )
   if #text > width then
     return text:sub(1, width)
   end
@@ -351,16 +374,30 @@ local function pager_line(shown, total, width)
 end
 
 ---@param view diffundo.Row[]
----@param opts { selected?: integer, total?: integer }
+---@return integer
+local function visible_count(view)
+  local shown = 0
+  for _, r in ipairs(view) do
+    if r.seq ~= 0 then
+      shown = shown + 1
+    end
+  end
+  return shown
+end
+
+---@param view diffundo.Row[]
+---@param opts { selected?: integer, total?: integer, current?: integer }
 ---@param width integer
 ---@return string[]
 local function footer_lines(view, opts, width)
+  local shown = visible_count(view)
+  local total = opts.total or shown
+  if #view == 0 then
+    return { "no matches", pager_line(0, total, width) }
+  end
   local index = clamp_index(opts.selected or 1, #view)
   local r = view[index]
-  local preview, _ = preview_parts(r)
-  local shown = #view
-  local total = opts.total or shown
-  return { status_line(r, preview, width), pager_line(shown, total, width) }
+  return { status_line(r, opts.current, width), pager_line(shown, total, width) }
 end
 
 ---@param view diffundo.Row[]
@@ -368,7 +405,11 @@ end
 ---@return integer
 local function run_end_for(view, i)
   local run_end = i
-  while run_end < #view and view[run_end].parent == view[run_end + 1].seq do
+  while
+    run_end < #view
+    and view[run_end].parent == view[run_end + 1].seq
+    and view[run_end + 1].seq ~= 0
+  do
     run_end = run_end + 1
   end
   return run_end
@@ -437,8 +478,12 @@ function M.display(view, opts)
   }
   local i = 1
   while i <= #view do
-    local run_end = run_end_for(view, i)
-    i = emit_run(view, i, run_end, fold_min, depth, children, time_w, width, opts.current, state)
+    if view[i].seq == 0 then
+      i = i + 1
+    else
+      local run_end = run_end_for(view, i)
+      i = emit_run(view, i, run_end, fold_min, depth, children, time_w, width, opts.current, state)
+    end
   end
   local buf_lines = state.lines
   buf_lines[state.buf] = string.rep("-", width)
