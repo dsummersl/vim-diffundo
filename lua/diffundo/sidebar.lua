@@ -47,20 +47,85 @@ local function pick_source()
   return candidate
 end
 
----@return string[]
-local function rendered_lines()
-  local width = vim.g.diffundo_history_width or 40
-  local lines = {}
-  for index, row in ipairs(view()) do
-    lines[index] = history.render(row, width)
+---@return integer|nil
+local function current_index()
+  return index_of_seq(vim.t.diffundo_diff_undonr)
+end
+
+---@param line integer
+---@return integer
+local function index_at_line(line)
+  local display = vim.t.diffundo_history_display
+  if display == nil then
+    return line
   end
-  return lines
+  for index, target in ipairs(display.row_to_line) do
+    if target == line then
+      return index
+    end
+  end
+  return line
+end
+
+---@return integer
+local function width()
+  return vim.g.diffundo_history_width or 40
+end
+
+---@return integer
+local function fold_min()
+  return vim.g.diffundo_fold_min or 3
+end
+
+local history_ns
+
+local function render_float()
+  local float = win()
+  if float == nil or not window.is_open(float) then
+    return
+  end
+  local display = history.display(vim.t.diffundo_history_view, {
+    current = vim.t.diffundo_diff_undonr,
+    width = width(),
+    selected = current_index(),
+    total = #rows(),
+    fold_min = fold_min(),
+  })
+  vim.t.diffundo_history_display = display
+  local buf = vim.api.nvim_win_get_buf(float)
+  window.render(float, display.lines)
+  if history_ns == nil then
+    history_ns = vim.api.nvim_create_namespace("diffundo_history")
+  end
+  vim.api.nvim_buf_clear_namespace(buf, history_ns)
+  for _, span in ipairs(display.spans) do
+    vim.api.nvim_buf_add_highlight(
+      buf,
+      history_ns,
+      span.hl,
+      span.line,
+      span.col_start,
+      span.col_end
+    )
+  end
+  vim.api.nvim_buf_call(buf, function()
+    vim.bo.foldmethod = "manual"
+    vim.cmd("%delfold")
+    for _, fold in ipairs(display.folds) do
+      vim.cmd(fold.start .. "," .. fold.stop .. "fold")
+    end
+    vim.wo.foldlevel = 0
+    vim.wo.foldtext = "getline(v:foldstart)"
+  end)
 end
 
 ---@param float integer|nil
 ---@return diffundo.Row|nil
 local function row_at(float)
-  local index = float and vim.api.nvim_win_get_cursor(float)[1] or 1
+  if float == nil then
+    return nil
+  end
+  local index = index_at_line(vim.api.nvim_win_get_cursor(float)[1])
   local row = view()[index]
   if row == nil or row.seq == 0 then
     return nil
@@ -68,12 +133,19 @@ local function row_at(float)
   return row
 end
 
+---@param index integer
+---@return integer
+local function to_line(index)
+  local display = vim.t.diffundo_history_display
+  return display and display.row_to_line[index] or index
+end
+
 ---@param seq integer|nil
 local function select_row(seq)
   local index = index_of_seq(seq)
   local float = win()
   if index and float then
-    vim.api.nvim_win_set_cursor(float, { index, 0 })
+    vim.api.nvim_win_set_cursor(float, { to_line(index), 0 })
   end
 end
 
@@ -95,9 +167,9 @@ function M.open()
   vim.t.diffundo_history_view = collected
   vim.t.diffundo_history_filter = nil
   local float = window.open({
-    lines = rendered_lines(),
+    lines = {},
     title = "diffundo history",
-    width = vim.g.diffundo_history_width or 40,
+    width = width(),
   })
   vim.t.diffundo_history_win = float
   window.map(float, "J", function()
@@ -118,6 +190,10 @@ function M.open()
   window.map(float, "<esc>", function()
     M.close()
   end)
+  window.map(float, "g?", function()
+    vim.notify("J/K saved jumps · <cr> place · / filter · g? help · q close")
+  end)
+  render_float()
   select_row(vim.t.diffundo_diff_undonr)
   return true
 end
@@ -131,7 +207,7 @@ function M.reveal(seq)
   if float and index_of_seq(seq) == nil then
     vim.t.diffundo_history_filter = nil
     vim.t.diffundo_history_view = rows()
-    window.render(float, rendered_lines())
+    render_float()
   end
   select_row(seq)
 end
@@ -151,6 +227,7 @@ function M.place()
     vim.cmd("silent undo " .. row.seq)
     split.place(vim.api.nvim_buf_get_lines(0, 0, -1, false), row.seq)
   end)
+  render_float()
   if float and window.is_open(float) then
     vim.api.nvim_set_current_win(float)
   end
@@ -162,10 +239,10 @@ function M.move_save(dir)
   if float == nil or not window.is_open(float) then
     return
   end
-  local index = vim.api.nvim_win_get_cursor(float)[1]
+  local index = index_at_line(vim.api.nvim_win_get_cursor(float)[1])
   local moved = history.next(view(), index, { dir = dir, written = true })
   if moved ~= index then
-    vim.api.nvim_win_set_cursor(float, { moved, 0 })
+    vim.api.nvim_win_set_cursor(float, { to_line(moved), 0 })
   end
 end
 
@@ -180,7 +257,7 @@ function M.filter()
   end
   local float = win()
   if float and window.is_open(float) then
-    window.render(float, rendered_lines())
+    render_float()
   end
 end
 
@@ -198,6 +275,7 @@ function M.close()
   vim.t.diffundo_history_rows = nil
   vim.t.diffundo_history_view = nil
   vim.t.diffundo_history_filter = nil
+  vim.t.diffundo_history_display = nil
   if window.is_open(fallback) then
     vim.api.nvim_set_current_win(fallback)
   end

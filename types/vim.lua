@@ -17,7 +17,7 @@
 ---@field nvim_set_current_win fun(window: integer)
 ---@field nvim_get_current_win fun(): integer
 ---@field nvim_win_is_valid fun(window: integer): boolean
----@field nvim_win_get_cursor fun(window: integer): integer[]
+---@field nvim_win_get_cursor fun(window: integer): [integer, integer]
 ---@field nvim_win_set_cursor fun(window: integer, pos: integer[])
 ---@field nvim_get_current_buf fun(): integer
 ---@field nvim_buf_is_valid fun(buffer: integer): boolean
@@ -42,6 +42,7 @@
 ---@field bufhidden string
 ---@field swapfile boolean
 ---@field readonly boolean
+---@field foldmethod string
 
 ---@class vim.wo
 ---@field diff boolean

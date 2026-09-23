@@ -39,13 +39,16 @@ describe("sidebar.open", function()
     assert.are.equal("nofile", vim.buffers[vim.windows[win].buf].options.buftype)
   end)
 
-  it("renders one line per state, newest first", function()
+  it("renders one line per state with a divider and footer, newest first", function()
     sidebar.open()
 
-    local lines = vim.buffers[vim.windows[float_win(vim)].buf].lines
-    assert.are.equal(3, #lines)
-    assert.matches("%- 3", lines[1])
-    assert.matches("%- 1", lines[3])
+    local buf = vim.buffers[vim.windows[float_win(vim)].buf]
+    assert.are.equal(6, #buf.lines)
+    assert.matches("^│%+ c", buf.lines[1])
+    assert.matches("^│%+ b", buf.lines[2])
+    assert.matches("^└%+ a", buf.lines[3])
+    assert.matches("^%-%-%-", buf.lines[4])
+    assert.matches("help: g%?", buf.lines[6])
   end)
 
   it("lands the cursor on the current diff state", function()
@@ -73,7 +76,7 @@ describe("sidebar.open", function()
 
     assert.are.equal(win, float_win(vim))
     assert.are.equal(win, vim.current_win)
-    assert.are.equal(6, count_keymaps(vim.keymaps[vim.windows[win].buf]))
+    assert.are.equal(7, count_keymaps(vim.keymaps[vim.windows[win].buf]))
   end)
 end)
 
@@ -97,11 +100,11 @@ describe("sidebar.reveal and the filter", function()
       return "b"
     end
     sidebar.filter()
-    assert.are.equal(1, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(4, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
 
     sidebar.reveal(3)
 
-    assert.are.equal(3, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(6, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
     assert.are.same({ 1, 0 }, vim.windows[float_win(vim)].cursor)
   end)
 end)
@@ -187,11 +190,11 @@ describe("sidebar.move_save and sidebar.filter", function()
   it("jumps between saved states", function()
     vim.history:branch(3, { "a", "b", "c", "d" }, { save = 1 })
     sidebar.open()
-    vim.api.nvim_win_set_cursor(float_win(vim), { 2, 0 })
+    vim.api.nvim_win_set_cursor(float_win(vim), { 3, 0 })
 
     sidebar.move_save(-1)
 
-    assert.are.same({ 1, 0 }, vim.windows[float_win(vim)].cursor)
+    assert.are.same({ 2, 0 }, vim.windows[float_win(vim)].cursor)
   end)
 
   it("narrows the list and clears on an empty prompt", function()
@@ -203,13 +206,13 @@ describe("sidebar.move_save and sidebar.filter", function()
     sidebar.filter()
 
     local buf = vim.buffers[vim.windows[float_win(vim)].buf]
-    assert.are.equal(1, #buf.lines)
+    assert.are.equal(4, #buf.lines)
     assert.matches("b", buf.lines[1])
 
     asked = ""
     sidebar.filter()
 
-    assert.are.equal(3, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(6, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
   end)
 end)
 
@@ -235,5 +238,46 @@ describe("sidebar.close and sidebar.toggle", function()
     assert.are_not.equal(nil, vim.t.diffundo_history_win)
     sidebar.toggle()
     assert.is_nil(vim.t.diffundo_history_win)
+  end)
+end)
+
+describe("sidebar layout integration", function()
+  it("renders via history.display with a footer", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    sidebar.open()
+
+    local buf = vim.buffers[vim.windows[float_win(vim)].buf]
+    assert.is_not_nil(vim.t.diffundo_history_display)
+    assert.are.equal(#vim.t.diffundo_history_display.lines, #buf.lines)
+    assert.matches("help: g?", buf.lines[#buf.lines])
+  end)
+
+  it("creates manual folds for long runs and collapses them", function()
+    local vim = fakevim.new(
+      fakevim.history({ {}, { "a" }, { "a", "b" }, { "a", "b", "c" }, { "a", "b", "c", "d" } })
+    )
+    vim:install()
+    sidebar.open()
+
+    assert.are.equal(1, #vim.folds)
+    assert.are.equal(0, vim.windows[float_win(vim)].options.foldlevel)
+  end)
+
+  it("applies the highlight spans", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    sidebar.open()
+
+    assert.is_true(#vim.highlights > 0)
+  end)
+
+  it("g? notifies the key list", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    sidebar.open()
+    vim:press("g?")
+
+    assert.matches("saved jumps", vim:last_notification())
   end)
 end)
