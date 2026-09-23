@@ -62,6 +62,22 @@ function M.relative(time)
   return "just now"
 end
 
+---@param time integer
+---@return string
+function M.short(time)
+  local delta = os.time() - time
+  if delta < 60 then
+    return "now"
+  end
+  for _, span in ipairs(spans) do
+    local count = math.floor(delta / span[1])
+    if count >= 1 then
+      return count .. span[2]
+    end
+  end
+  return "now"
+end
+
 ---@param label string
 function M.apply(label)
   vim.api.nvim_buf_set_name(0, label)
