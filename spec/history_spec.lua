@@ -38,7 +38,8 @@ end)
 
 describe("history.preview_parts", function()
   local function row(over)
-    local base = { seq = 4, time = 1004, save = nil, added = {}, removed = {}, parent = 3 }
+    local base =
+      { seq = 4, time = 1004, save = nil, added = {}, removed = {}, parent = 3, label = "" }
     for key, value in pairs(over or {}) do
       base[key] = value
     end
@@ -172,5 +173,96 @@ describe("history.filtered", function()
     local rows = { { seq = 3, added = {}, removed = { "ax" } } }
 
     assert.are.equal(3, history.filtered(rows, regex, { removed = true })[1].seq)
+  end)
+end)
+
+describe("history.display", function()
+  local function row(over)
+    local base =
+      { seq = 4, time = os.time() - 120, save = nil, added = {}, removed = {}, parent = 3 }
+    for key, value in pairs(over or {}) do
+      base[key] = value
+    end
+    return base
+  end
+
+  it("renders a linear chain with flat gutters and right-aligned time", function()
+    local rows = {
+      row({ seq = 3, parent = 2, time = os.time() - 120, added = { "foo()" } }),
+      row({ seq = 2, parent = 1, time = os.time() - 240 }),
+      row({ seq = 1, parent = 0, time = os.time() - 300 }),
+    }
+    local display = history.display(rows, { width = 30 })
+
+    assert.matches("^│%+ foo%(%)", display.lines[1])
+    assert.matches("2m$", display.lines[1])
+    assert.matches("^│", display.lines[2])
+    assert.matches("^└", display.lines[3])
+    assert.are.same({ 1, 2, 3 }, display.row_to_line)
+  end)
+
+  it("marks the diff's state with the current glyph", function()
+    local rows = {
+      row({ seq = 2, parent = 1, save = 1 }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { current = 2, width = 30 })
+
+    assert.matches("^◉", display.lines[1])
+    assert.matches("^└", display.lines[2])
+  end)
+
+  it("nests a lane on a branch switch and draws the fork junction", function()
+    local rows = {
+      row({ seq = 4, parent = 2 }),
+      row({ seq = 3, parent = 2 }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { width = 30 })
+
+    assert.matches("^│", display.lines[1])
+    assert.matches("^┊│", display.lines[2])
+    assert.matches("^┊├┐", display.lines[3])
+    assert.matches("^┊└", display.lines[4])
+  end)
+
+  it("renders a saved alternate with the ● glyph on the dashed lane", function()
+    local rows = {
+      row({ seq = 4, parent = 2 }),
+      row({ seq = 3, parent = 1, save = 1, added = { "x" } }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { width = 30 })
+
+    assert.matches("^│", display.lines[1])
+    assert.matches("^┊●", display.lines[2])
+  end)
+
+  it("folds a long same-branch run into a caption and a vim fold", function()
+    local rows = {
+      row({ seq = 5, parent = 4 }),
+      row({ seq = 4, parent = 3 }),
+      row({ seq = 3, parent = 2 }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { width = 30, fold_min = 3 })
+
+    assert.matches("%+5 states: %+0 %-0 lines 5 undos", display.lines[1])
+    assert.are.same({ { start = 1, stop = 5 } }, display.folds)
+    assert.are.same({ 2, 3, 4, 5, 6 }, display.row_to_line)
+  end)
+
+  it("appends the footer under a divider", function()
+    local rows = { row({ seq = 2, parent = 1 }), row({ seq = 1, parent = 0 }) }
+    local display = history.display(rows, { width = 30, selected = 1, total = 4 })
+
+    assert.are.equal(3, display.footer_start)
+    assert.matches("^%-%-%-", display.lines[3])
+    assert.matches("^#2", display.lines[4])
+    assert.matches("2/4", display.lines[5])
+    assert.matches("help: g%?$", display.lines[5])
   end)
 end)
