@@ -42,7 +42,7 @@ describe("window.open", function()
     vim.o.lines = 5
     local win = window.open({ lines = { "a", "b", "c" }, title = "t", width = 40 })
 
-    assert.are.equal(1, vim.windows[win].config.height)
+    assert.are.equal(2, vim.windows[win].config.height)
   end)
 end)
 

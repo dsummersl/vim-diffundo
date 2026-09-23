@@ -9,7 +9,7 @@ function M.open(opts)
     row = 0,
     col = math.max(0, vim.o.columns - opts.width),
     width = opts.width,
-    height = math.max(1, math.min(#opts.lines, vim.o.lines - 4)),
+    height = math.max(2, math.min(#opts.lines, vim.o.lines - 4)),
   })
   vim.bo.buftype = "nofile"
   vim.bo.bufhidden = "wipe"
@@ -24,7 +24,7 @@ end
 function M.render(win, lines)
   vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, lines)
   vim.api.nvim_win_set_config(win, {
-    height = math.max(1, math.min(#lines, vim.o.lines - 4)),
+    height = math.max(2, math.min(#lines, vim.o.lines - 4)),
   })
 end
 

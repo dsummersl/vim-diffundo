@@ -97,7 +97,7 @@ local function render_float()
   if history_ns == nil then
     history_ns = vim.api.nvim_create_namespace("diffundo_history")
   end
-  vim.api.nvim_buf_clear_namespace(buf, history_ns)
+  vim.api.nvim_buf_clear_namespace(buf, history_ns, 0, -1)
   for _, span in ipairs(display.spans) do
     vim.api.nvim_buf_add_highlight(
       buf,
@@ -109,8 +109,8 @@ local function render_float()
     )
   end
   vim.api.nvim_buf_call(buf, function()
-    vim.bo.foldmethod = "manual"
-    vim.cmd("%delfold")
+    vim.wo.foldmethod = "manual"
+    vim.cmd("normal! zE")
     for _, fold in ipairs(display.folds) do
       vim.cmd(fold.start .. "," .. fold.stop .. "fold")
     end

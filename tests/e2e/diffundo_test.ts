@@ -636,17 +636,19 @@ test({
     await denops.cmd("Diffundo earlier");
 
     // WHY: the float is current, its selected row (seq 2 / line 2) is the state
-    // the diff shows, and jj from there lands on the oldest row (seq 1).
+    // the diff shows; the divider sits below the rows, so a single j lands on
+    // the last real row (line 3, the oldest state, seq 1) while jj would
+    // overshoot onto the divider, where <cr> has no row.
     assertEquals(await denops.eval("[line('.'), col('.')]"), [2, 1]);
     // WHY: g? in the float must surface the key help, not an empty message.
     await denops.call("feedkeys", "g?", "x");
     const hint = await denops.call("execute", "messages") as string;
     assert(hint.includes("saved jumps"), hint);
     await denops.cmd("messages clear");
-    // Move to the oldest row and confirm it into the diff.
+    // Move to the oldest row (the last real row) and confirm it into the diff.
     // WHY: feedkeys never translates the <CR> keycode, so the Enter has to go
     // through nvim_input to reach the float's <cr> map.
-    await denops.call("feedkeys", "jj", "x");
+    await denops.call("feedkeys", "j", "x");
     await denops.call("nvim_input", "<CR>");
 
     const window = (await windowStates(denops)).find((w) => w.buftype === "nofile");

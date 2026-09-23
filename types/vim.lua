@@ -33,7 +33,7 @@
 ---@field nvim_create_user_command fun(name: string, command: fun(opts: { args: string }), opts: table)
 ---@field nvim_create_namespace fun(name: string): integer
 ---@field nvim_buf_add_highlight fun(buffer: integer, ns_id: integer, hl_group: string, line: integer, col_start: integer, col_end: integer)
----@field nvim_buf_clear_namespace fun(buffer: integer, ns_id: integer)
+---@field nvim_buf_clear_namespace fun(buffer: integer, ns_id: integer, line_start: integer, line_end: integer)
 ---@field nvim_buf_call fun(buffer: integer, fn: fun())
 
 ---@class vim.bo
@@ -42,7 +42,6 @@
 ---@field bufhidden string
 ---@field swapfile boolean
 ---@field readonly boolean
----@field foldmethod string
 
 ---@class vim.wo
 ---@field diff boolean

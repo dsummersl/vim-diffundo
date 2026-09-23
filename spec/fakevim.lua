@@ -201,6 +201,11 @@ local function commands(self)
     delfold = function()
       self.folds = {}
     end,
+    ["normal!"] = function(rest)
+      if rest == "zE" then
+        self.folds = {}
+      end
+    end,
   }
 end
 
