@@ -179,32 +179,61 @@ local function children_for(view, seq_index)
   return children
 end
 
+---@param view diffundo.Row[]
+---@param seq_index table<integer, integer>
+---@return table<integer, boolean>
+local function trunk_of(view, seq_index)
+  local trunk = {}
+  local i = 1
+  while i do
+    local r = view[i]
+    if not r then
+      break
+    end
+    trunk[r.seq] = true
+    if r.parent == 0 then
+      break
+    end
+    i = seq_index[r.parent]
+  end
+  return trunk
+end
+
 ---@param kids integer[]
+---@param trunk table<integer, boolean>
+---@param view diffundo.Row[]
 ---@param target integer
 ---@return integer
-local function rank_of(kids, target)
-  for k, child in ipairs(kids) do
-    if child == target then
-      return k
+local function alt_of(kids, trunk, view, target)
+  local alt = 1
+  for _, kid in ipairs(kids) do
+    if kid == target then
+      return alt
+    end
+    if trunk[view[kid].seq] == nil then
+      alt = alt + 1
     end
   end
-  return 1
+  return alt
 end
 
 ---@param view diffundo.Row[]
 ---@param seq_index table<integer, integer>
 ---@param children integer[][]
+---@param trunk table<integer, boolean>
 ---@return integer[]
-local function lane_for(view, seq_index, children)
+local function lane_for(view, seq_index, children, trunk)
   local lane = {}
   for i = #view, 1, -1 do
     local r = view[i]
-    if r.parent == 0 then
+    if trunk[r.seq] then
       lane[i] = 1
     else
       local parent = seq_index[r.parent]
-      if parent and lane[parent] then
-        lane[i] = lane[parent] + rank_of(children[parent], i) - 1
+      if parent then
+        if lane[parent] then
+          lane[i] = lane[parent] + alt_of(children[parent], trunk, view, i)
+        end
       end
     end
   end
@@ -246,6 +275,26 @@ local function subtree_ends(view, children)
   return last
 end
 
+---@param view diffundo.Row[]
+---@param children integer[][]
+---@return integer[]
+local function subtree_starts(view, children)
+  local first = {}
+  for i = 1, #view do
+    local stop = i
+    local kids = children[i]
+    if kids then
+      for _, child in ipairs(kids) do
+        if first[child] < stop then
+          stop = first[child]
+        end
+      end
+    end
+    first[i] = stop
+  end
+  return first
+end
+
 ---@param open table<integer, table<integer, boolean>>
 ---@param col integer
 ---@param start_i integer
@@ -260,17 +309,41 @@ end
 
 ---@param view diffundo.Row[]
 ---@param children integer[][]
+---@param trunk table<integer, boolean>
+---@return integer[]
+local function alternates_for(view, children, trunk)
+  local alts = {}
+  for i = 1, #view do
+    local alt = 0
+    local kids = children[i]
+    if kids then
+      for _, kid in ipairs(kids) do
+        if trunk[view[kid].seq] == nil then
+          alt = alt + 1
+        end
+      end
+    end
+    alts[i] = alt
+  end
+  return alts
+end
+
+---@param view diffundo.Row[]
+---@param children integer[][]
 ---@param lane integer[]
+---@param first integer[]
 ---@param last integer[]
+---@param trunk table<integer, boolean>
 ---@return table<integer, table<integer, boolean>>
-local function open_columns(view, children, lane, last)
+local function open_columns(view, children, lane, first, last, trunk)
   local open = {}
   for i = 1, #view do
     local kids = children[i]
     if kids then
-      for k = 2, #kids do
-        local arm = kids[k]
-        mark_open(open, lane[arm], arm, last[arm])
+      for _, arm in ipairs(kids) do
+        if trunk[view[arm].seq] == nil then
+          mark_open(open, lane[arm], first[arm], last[arm])
+        end
       end
     end
   end
@@ -278,13 +351,22 @@ local function open_columns(view, children, lane, last)
 end
 
 ---@param view diffundo.Row[]
----@return integer[], integer[][], table<integer, table<integer, boolean>>
+---@return integer[], integer[][], table<integer, table<integer, boolean>>, integer[]
 local function topology_for(view)
   local seq_index = seq_index_for(view)
   local children = children_for(view, seq_index)
-  local lane = fill_lanes(view, lane_for(view, seq_index, children))
-  local open = open_columns(view, children, lane, subtree_ends(view, children))
-  return lane, children, open
+  local trunk = trunk_of(view, seq_index)
+  local lane = fill_lanes(view, lane_for(view, seq_index, children, trunk))
+  local alts = alternates_for(view, children, trunk)
+  local open = open_columns(
+    view,
+    children,
+    lane,
+    subtree_starts(view, children),
+    subtree_ends(view, children),
+    trunk
+  )
+  return lane, children, open, alts
 end
 
 ---@param is_current boolean
@@ -316,15 +398,15 @@ end
 ---@param kids integer[]
 ---@param i integer
 ---@param last integer
+---@param non_alts integer
 ---@param is_current boolean
 ---@param save boolean
 ---@return string[]
-local function lane_cells(kids, i, last, is_current, save)
+local function lane_cells(kids, i, last, non_alts, is_current, save)
   if #kids >= 2 then
-    local tails = #kids - 1
     local cells = { "├" }
-    for k = 1, tails do
-      cells[#cells + 1] = arm_glyph(k, tails)
+    for k = 1, non_alts do
+      cells[#cells + 1] = arm_glyph(k, non_alts)
     end
     return cells
   end
@@ -360,12 +442,13 @@ end
 ---@param children integer[][]
 ---@param open_i table<integer, boolean>|nil
 ---@param last_row integer
+---@param non_alts integer
 ---@param is_current boolean
 ---@param save boolean
 ---@return string
-local function gutter_for(i, lane, children, open_i, last_row, is_current, save)
+local function gutter_for(i, lane, children, open_i, last_row, non_alts, is_current, save)
   local cells = pass_columns(lane, open_i)
-  for _, cell in ipairs(lane_cells(children[i] or {}, i, last_row, is_current, save)) do
+  for _, cell in ipairs(lane_cells(children[i] or {}, i, last_row, non_alts, is_current, save)) do
     cells[#cells + 1] = cell
   end
   return table.concat(cells, "")
@@ -376,13 +459,15 @@ end
 ---@param lane integer[]
 ---@param open table<integer, table<integer, boolean>>
 ---@param children integer[][]
+---@param alts integer[]
 ---@param time_w integer
 ---@param width integer
 ---@param current integer|nil
 ---@return string, diffundo.Span[]
-local function row_line(view, i, lane, open, children, time_w, width, current)
+local function row_line(view, i, lane, open, children, alts, time_w, width, current)
   local r = view[i]
-  local gutter = gutter_for(i, lane[i], children, open[i], #view, r.seq == current, r.save ~= nil)
+  local gutter =
+    gutter_for(i, lane[i], children, open[i], #view, alts[i], r.seq == current, r.save ~= nil)
   local preview, marks = preview_parts(r)
   local time = label.short(r.time)
   local body_w = width - #gutter - time_w
@@ -423,7 +508,7 @@ local function caption_for(view, first, count, lane, open, time_w, width)
     removed = removed + #view[first + offset].removed
   end
   local text = string.format("+%d states: +%d -%d lines %d undos", count, added, removed, count)
-  local gutter = gutter_for(first, lane[first], {}, open[first], #view, false, false)
+  local gutter = gutter_for(first, lane[first], {}, open[first], #view, 0, false, false)
   local time = label.short(view[first].time)
   local body_w = width - #gutter - time_w
   return gutter
@@ -538,12 +623,13 @@ end
 ---@param lane integer[]
 ---@param open table<integer, table<integer, boolean>>
 ---@param children integer[][]
+---@param alts integer[]
 ---@param time_w integer
 ---@param width integer
 ---@param current integer|nil
 ---@param state diffundo.DisplayBuf
-local function emit_row(view, index, lane, open, children, time_w, width, current, state)
-  local text, row_spans = row_line(view, index, lane, open, children, time_w, width, current)
+local function emit_row(view, index, lane, open, children, alts, time_w, width, current, state)
+  local text, row_spans = row_line(view, index, lane, open, children, alts, time_w, width, current)
   state.row_to_line[index] = state.buf
   state.lines[state.buf] = text
   for _, span in ipairs(row_spans) do
@@ -560,6 +646,7 @@ end
 ---@param lane integer[]
 ---@param open table<integer, table<integer, boolean>>
 ---@param children integer[][]
+---@param alts integer[]
 ---@param time_w integer
 ---@param width integer
 ---@param current integer|nil
@@ -573,6 +660,7 @@ local function emit_run(
   lane,
   open,
   children,
+  alts,
   time_w,
   width,
   current,
@@ -584,12 +672,12 @@ local function emit_run(
     state.lines[start] = caption_for(view, i, run_len, lane, open, time_w, width)
     state.buf = start + 1
     for index = i, run_end do
-      emit_row(view, index, lane, open, children, time_w, width, current, state)
+      emit_row(view, index, lane, open, children, alts, time_w, width, current, state)
     end
     state.folds[#state.folds + 1] = { start = start, stop = start + run_len - 1 }
     return run_end + 1
   end
-  emit_row(view, i, lane, open, children, time_w, width, current, state)
+  emit_row(view, i, lane, open, children, alts, time_w, width, current, state)
   return i + 1
 end
 
@@ -598,7 +686,7 @@ end
 ---@return diffundo.Display
 function M.display(view, opts)
   local width = opts.width
-  local lane, children, open = topology_for(view)
+  local lane, children, open, alts = topology_for(view)
   local time_w = M.time_width(view)
   local fold_min = opts.fold_min or 3
   local state = {
@@ -622,6 +710,7 @@ function M.display(view, opts)
         lane,
         open,
         children,
+        alts,
         time_w,
         width,
         opts.current,

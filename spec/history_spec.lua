@@ -246,20 +246,43 @@ describe("history.display", function()
     assert.matches("^└", display.lines[6])
   end)
 
-  it("keeps nested pass-through columns over the branch subtree", function()
+  it("nests a branch off an alternate and passes under open lanes", function()
     local rows = {
-      row({ seq = 8, parent = 7 }),
-      row({ seq = 7, parent = 5 }),
+      row({ seq = 8, parent = 5 }),
+      row({ seq = 7, parent = 6 }),
       row({ seq = 6, parent = 4 }),
       row({ seq = 5, parent = 4 }),
-      row({ seq = 4, parent = 0 }),
+      row({ seq = 4, parent = 3 }),
+      row({ seq = 3, parent = 2 }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { width = 30, fold_min = 9 })
+
+    assert.matches("^│", display.lines[1])
+    assert.matches("^┊┊│", display.lines[2])
+    assert.matches("^┊│", display.lines[3])
+    assert.matches("^│", display.lines[4])
+    assert.matches("^├┐", display.lines[5])
+    assert.matches("^│", display.lines[6])
+    assert.matches("^│", display.lines[7])
+    assert.matches("^└", display.lines[8])
+  end)
+
+  it("keeps the newest chain on lane 1 when the trunk child is not first", function()
+    local rows = {
+      row({ seq = 8, parent = 6 }),
+      row({ seq = 6, parent = 4 }),
+      row({ seq = 5, parent = 3 }),
+      row({ seq = 4, parent = 3 }),
+      row({ seq = 3, parent = 0 }),
     }
     local display = history.display(rows, { width = 30 })
 
-    assert.matches("^┊│", display.lines[1])
-    assert.matches("^┊│", display.lines[2])
-    assert.matches("^│", display.lines[3])
-    assert.matches("^┊│", display.lines[4])
+    assert.matches("^│", display.lines[1])
+    assert.matches("^│", display.lines[2])
+    assert.matches("^┊│", display.lines[3])
+    assert.matches("^│", display.lines[4])
     assert.matches("^├┐", display.lines[5])
   end)
 
@@ -272,8 +295,8 @@ describe("history.display", function()
     }
     local display = history.display(rows, { width = 30 })
 
-    assert.matches("^┊│", display.lines[1])
-    assert.matches("^●", display.lines[2])
+    assert.matches("^│", display.lines[1])
+    assert.matches("^┊●", display.lines[2])
   end)
 
   it("folds a long same-branch run into a caption and a vim fold", function()
