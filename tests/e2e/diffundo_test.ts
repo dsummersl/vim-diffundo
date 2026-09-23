@@ -99,6 +99,46 @@ async function isFloat(denops: Denops, win: number): Promise<boolean> {
   return config.relative === "editor";
 }
 
+async function floatLines(denops: Denops, win: number): Promise<string[]> {
+  const buf = await denops.call("nvim_win_get_buf", win) as number;
+  return await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
+}
+
+// WHY: the sidebar opens two floats: a tall tree float holding just the
+// row/caption lines, and a 2-row footer float pinned below it (`enter=false`)
+// whose last line carries the `help: g?` key hint.
+async function isFooterFloat(denops: Denops, win: number): Promise<boolean> {
+  const config = await denops.call("nvim_win_get_config", win) as {
+    height?: number;
+  };
+  if (config.height !== 2) return false;
+  const lines = await floatLines(denops, win);
+  const last = lines[lines.length - 1];
+  return last !== undefined && last.endsWith("help: g?");
+}
+
+interface FloatRoster {
+  tree: number | null;
+  footer: number | null;
+  count: number;
+}
+
+// WHY: every history panel is one tree float plus one footer float; the tree
+// is distinguished as the float that is not the 2-row footer.
+async function floatRoster(denops: Denops): Promise<FloatRoster> {
+  const roster: FloatRoster = { tree: null, footer: null, count: 0 };
+  for (const win of await winIds(denops)) {
+    if (!(await isFloat(denops, win))) continue;
+    roster.count += 1;
+    if (await isFooterFloat(denops, win)) {
+      roster.footer = win;
+    } else {
+      roster.tree = win;
+    }
+  }
+  return roster;
+}
+
 // WHY: the plugin reports its own failures with print() rather than raising,
 // so they never reject the denops call and only show up in :messages.
 async function assertNoErrors(denops: Denops): Promise<void> {
@@ -117,13 +157,26 @@ async function assertDiffSplit(
 ): Promise<void> {
   await assertNoErrors(denops);
 
-  // WHY: :Diffundo opens the floating history by default alongside the split;
+  // WHY: :Diffundo opens the two-float history by default alongside the split;
   // -no-history commands pass floats: 0 for the minimal layout.
-  const floats: number[] = [];
-  for (const win of await winIds(denops)) {
-    if (await isFloat(denops, win)) floats.push(win);
+  const { tree, footer, count } = await floatRoster(denops);
+  const expectedFloats = expected.floats ?? 2;
+  assertEquals(count, expectedFloats, "expected history float count");
+  if (expectedFloats === 2) {
+    // WHY: the panel is the focused tree float plus its pinned footer float.
+    assert(tree, "the tree float is open");
+    assert(footer, "the footer float is open");
+    const columns = await denops.eval("&columns") as number;
+    assertEquals(
+      await denops.call("nvim_win_get_position", tree),
+      [0, columns - 40],
+    );
+    const footerLines = await floatLines(denops, footer);
+    assert(
+      footerLines[footerLines.length - 1].endsWith("help: g?"),
+      footerLines.join("\n"),
+    );
   }
-  assertEquals(floats.length, expected.floats ?? 1, "expected history float count");
 
   const windows = await windowStates(denops);
   const undoBuffer = windows.find((w) => w.buftype === "nofile");
@@ -163,30 +216,37 @@ async function assertSourceAlone(
   assertEquals(await denops.call("changenr"), expected.changenr);
 }
 
-// WHY: :Diffundo now opens the floating history by default.
+// WHY: :Diffundo history opens the two-float sidebar by default.
 async function assertHistory(
   denops: Denops,
   expected: string[],
 ): Promise<void> {
   await assertNoErrors(denops);
-  const wins = await winIds(denops);
-  const floats: number[] = [];
-  for (const win of wins) {
-    if (await isFloat(denops, win)) floats.push(win);
-  }
-  assertEquals(floats.length, 1, "expected exactly one history float");
+  const { tree, footer, count } = await floatRoster(denops);
+  assertEquals(count, 2, "expected exactly two history floats");
+  assert(tree, "the tree float is open");
+  assert(footer, "the footer float is open");
 
   // WHY: the sidebar defaults to the upper right of the editor, flush against
   // the right edge, with the default width of 40.
   const columns = await denops.eval("&columns") as number;
-  const pos = await denops.call("nvim_win_get_position", floats[0]) as [number, number];
-  assertEquals(pos, [0, columns - 40]);
+  assertEquals(
+    await denops.call("nvim_win_get_position", tree),
+    [0, columns - 40],
+  );
 
-  const buf = await denops.call("nvim_win_get_buf", floats[0]) as number;
+  // WHY: the footer float pins the #N status and key hint under the tree.
+  const footerLines = await floatLines(denops, footer);
+  assert(
+    footerLines[footerLines.length - 1].endsWith("help: g?"),
+    footerLines.join("\n"),
+  );
+
+  const buf = await denops.call("nvim_win_get_buf", tree) as number;
   const lines = await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
   assertEquals(lines, expected);
-  // WHY: the user lands in the float, keyboard-first.
-  assertEquals(await denops.call("nvim_get_current_win"), floats[0]);
+  // WHY: the user lands in the tree float, keyboard-first.
+  assertEquals(await denops.call("nvim_get_current_win"), tree);
 }
 
 // WHY: :only errors (E5601) while a float is open.
@@ -575,16 +635,28 @@ test({
     const lines = await denops.eval(
       "getbufline(winbufnr(0), 1, '$')",
     ) as string[];
-    assert(lines.length >= 1, "the float shows the newest state first");
-    // WHY: with the sidebar layout the row no longer carries the seq label, so
-    // match the footer's #N status line instead.
-    const blob = lines.join("\n");
-    assert(blob.includes("#2"), blob);
+    assert(lines.length >= 1, "the tree float shows the newest state first");
+    // WHY: the tree float holds only the rows, so the #N status and key hint
+    // live in the separate footer float pinned below it.
+    const { tree, footer, count } = await floatRoster(denops);
+    assertEquals(count, 2, "expected tree + footer floats");
+    assert(tree, "the tree float is open");
+    assert(footer, "the footer float is open");
+    assertEquals(
+      await denops.call("nvim_get_current_win"),
+      tree,
+      "the tree float is focused",
+    );
+    const footerBlob = (await floatLines(denops, footer)).join("\n");
+    assert(footerBlob.includes("#2"), footerBlob);
+    assert(footerBlob.includes("help: g?"), footerBlob);
     await assertHistory(denops, lines);
 
     await denops.cmd("Diffundo history");
-    // WHY: toggled off, the current window is the source again.
+    // WHY: toggled off, the current window is the source again and both
+    // floats are gone.
     assertEquals((await denops.eval("&buftype")) as string, "");
+    assertEquals((await floatRoster(denops)).count, 0, "both floats close on toggle off");
   },
 });
 
@@ -603,13 +675,12 @@ test({
 
     await denops.cmd("Diffundo history");
 
-    const wins = await winIds(denops);
-    const floats: number[] = [];
-    for (const w of wins) {
-      if (await isFloat(denops, w)) floats.push(w);
-    }
-    assertEquals(floats.length, 1);
-    const buf = await denops.call("nvim_win_get_buf", floats[0]) as number;
+    const { tree, count } = await floatRoster(denops);
+    assertEquals(count, 2, "expected tree + footer floats");
+    assert(tree, "the tree float is open");
+    // WHY: folds are applied to the tree float's buffer, while the footer
+    // float is not part of the foldable rows.
+    const buf = await denops.call("nvim_win_get_buf", tree) as number;
     const all = await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
     const caption = all.findIndex((l) => /states:/.test(l));
     assert(caption >= 0, all.join("\n"));
@@ -635,11 +706,11 @@ test({
 
     await denops.cmd("Diffundo earlier");
 
-    // WHY: the float is current, its selected row (seq 2 / line 2) is the state
-    // the diff shows; the rows end at line 3, then come the footer and any
-    // padding, so a single j lands on the last real row (line 3, the oldest
-    // state, seq 1) while jj would overshoot onto the footer, where <cr> has
-    // no row.
+    // WHY: the tree float is current and holds only the rows, one per undo
+    // state; its selected row (seq 2 / line 2) is the state the diff shows.
+    // The rows end at line 3, so a single j lands on the last row (line 3,
+    // the oldest state, seq 1) while jj would overshoot onto the empty space
+    // below the rows, where <cr> has no row.
     assertEquals(await denops.eval("[line('.'), col('.')]"), [2, 1]);
     // WHY: g? in the float must surface the key help, not an empty message.
     await denops.call("feedkeys", "g?", "x");
