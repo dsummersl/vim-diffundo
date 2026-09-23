@@ -175,6 +175,13 @@ async function assertHistory(
     if (await isFloat(denops, win)) floats.push(win);
   }
   assertEquals(floats.length, 1, "expected exactly one history float");
+
+  // WHY: the sidebar defaults to the upper right of the editor, flush against
+  // the right edge, with the default width of 40.
+  const columns = await denops.eval("&columns") as number;
+  const pos = await denops.call("nvim_win_get_position", floats[0]) as [number, number];
+  assertEquals(pos, [0, columns - 40]);
+
   const buf = await denops.call("nvim_win_get_buf", floats[0]) as number;
   const lines = await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
   assertEquals(lines, expected);

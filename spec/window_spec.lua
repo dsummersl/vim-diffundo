@@ -9,17 +9,24 @@ describe("window.open", function()
     vim:install()
   end)
 
-  it("creates a focused float with the config and winbar", function()
+  it("creates a focused float in the upper right", function()
     local win = window.open({ lines = { "one", "two" }, title = "diffundo history", width = 40 })
 
     assert.are.equal(win, vim.current_win)
     local config = vim.windows[win].config
     assert.are.equal("editor", config.relative)
     assert.are.equal(0, config.row)
-    assert.are.equal(0, config.col)
+    assert.are.equal(40, config.col)
     assert.are.equal(40, config.width)
     assert.are.equal(2, config.height)
     assert.are.equal("diffundo history", vim.windows[win].options.winbar)
+  end)
+
+  it("clamps the column to the editor width", function()
+    vim.o.columns = 30
+    local win = window.open({ lines = { "one" }, title = "t", width = 40 })
+
+    assert.are.equal(0, vim.windows[win].config.col)
   end)
 
   it("configures a scratch buffer and fills the lines", function()

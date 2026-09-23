@@ -7,7 +7,7 @@ function M.open(opts)
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
     row = 0,
-    col = 0,
+    col = math.max(0, vim.o.columns - opts.width),
     width = opts.width,
     height = math.max(1, math.min(#opts.lines, vim.o.lines - 4)),
   })

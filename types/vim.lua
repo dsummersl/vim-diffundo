@@ -54,6 +54,7 @@
 ---@field ignorecase boolean
 ---@field smartcase boolean
 ---@field lines integer
+---@field columns integer
 
 ---@class vim.keymap
 ---@field set fun(mode: string, lhs: string, rhs: string|fun(), opts: table)

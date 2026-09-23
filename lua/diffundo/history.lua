@@ -53,7 +53,7 @@ function M.row_for(step)
     save = step.save,
     added = step.added,
     removed = step.removed,
-    label = label.for_undonr(step.seq),
+    label = label.relative(step.time) .. " - " .. step.seq,
   }
 end
 

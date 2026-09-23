@@ -67,9 +67,10 @@ History sidebar
 
 `:Diffundo earlier/later/search` open the history float by default;
 `:Diffundo -no-history earlier` (or `g:diffundo_history` = `false`) keeps the
-minimal layout. `g:diffundo_history_width` (default 40) sets the width. The
-float's rows come from `require("diffundo.history").rows`, the same list the
-future telescope/quickfix front-ends reuse.
+minimal layout. The float sits in the upper right of the editor by default;
+`g:diffundo_history_width` (default 40) sets its width. The float's rows come
+from `require("diffundo.history").rows`, the same list the future
+telescope/quickfix front-ends reuse.
 
 Setup
 -----

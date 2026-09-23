@@ -1,5 +1,14 @@
 local M = {}
 
+local spans = {
+  { 60 * 60 * 24 * 365, "y" },
+  { 60 * 60 * 24 * 30, "mo" },
+  { 60 * 60 * 24 * 7, "w" },
+  { 60 * 60 * 24, "d" },
+  { 60 * 60, "h" },
+  { 60, "m" },
+}
+
 ---@class diffundo.UndoEntry
 ---@field seq integer
 ---@field time integer
@@ -35,6 +44,22 @@ function M.for_undonr(undonr)
   end
 
   return os.date("%Y-%m-%d %I:%M:%S %p", entry.time) .. " - " .. entry.seq
+end
+
+---@param time integer
+---@return string
+function M.relative(time)
+  local delta = os.time() - time
+  if delta < 60 then
+    return "just now"
+  end
+  for _, span in ipairs(spans) do
+    local count = math.floor(delta / span[1])
+    if count >= 1 then
+      return string.format("%d%s ago", count, span[2])
+    end
+  end
+  return "just now"
 end
 
 ---@param label string

@@ -29,10 +29,10 @@ describe("history.row_for", function()
     assert.are.same({ "y" }, row.removed)
   end)
 
-  it("labels from the undotree entry", function()
+  it("labels a row with its relative time and sequence", function()
     local row = history.row_for(step({ seq = 2 }))
 
-    assert.matches("%- 2$", row.label)
+    assert.matches("%d+y ago %- 2$", row.label)
   end)
 end)
 
