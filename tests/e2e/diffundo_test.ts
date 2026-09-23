@@ -576,14 +576,48 @@ test({
       "getbufline(winbufnr(0), 1, '$')",
     ) as string[];
     assert(lines.length >= 1, "the float shows the newest state first");
-    // WHY: the label is followed by the row preview ("  + two"), so match the
-    // labelled sequence rather than the row's very end.
-    assert(lines[0].includes("- 2"), lines[0]);
+    // WHY: with the sidebar layout the row no longer carries the seq label, so
+    // match the footer's #N status line instead.
+    const blob = lines.join("\n");
+    assert(blob.includes("#2"), blob);
     await assertHistory(denops, lines);
 
     await denops.cmd("Diffundo history");
     // WHY: toggled off, the current window is the source again.
     assertEquals((await denops.eval("&buftype")) as string, "");
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "a long same-branch run folds into a caption and zo unfolds it",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [
+      ["one"],
+      ["one", "two"],
+      ["one", "two", "three"],
+      ["one", "two", "three", "four"],
+    ]);
+
+    await denops.cmd("Diffundo history");
+
+    const wins = await winIds(denops);
+    const floats: number[] = [];
+    for (const w of wins) {
+      if (await isFloat(denops, w)) floats.push(w);
+    }
+    assertEquals(floats.length, 1);
+    const buf = await denops.call("nvim_win_get_buf", floats[0]) as number;
+    const all = await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
+    const caption = all.findIndex((l) => /states:/.test(l));
+    assert(caption >= 0, all.join("\n"));
+    const captionLine = caption + 1;
+
+    assertEquals(await denops.call("foldclosed", captionLine), captionLine);
+    await denops.cmd(`${captionLine}normal! zo`);
+    assertEquals(await denops.call("foldclosed", captionLine), -1);
   },
 });
 
@@ -604,6 +638,11 @@ test({
     // WHY: the float is current, its selected row (seq 2 / line 2) is the state
     // the diff shows, and jj from there lands on the oldest row (seq 1).
     assertEquals(await denops.eval("[line('.'), col('.')]"), [2, 1]);
+    // WHY: g? in the float must surface the key help, not an empty message.
+    await denops.call("feedkeys", "g?", "x");
+    const hint = await denops.call("execute", "messages") as string;
+    assert(hint.includes("saved jumps"), hint);
+    await denops.cmd("messages clear");
     // Move to the oldest row and confirm it into the diff.
     // WHY: feedkeys never translates the <CR> keycode, so the Enter has to go
     // through nvim_input to reach the float's <cr> map.
