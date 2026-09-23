@@ -78,10 +78,17 @@ describe("history.rows", function()
     assert.are.equal(3, vim.history.seq)
   end)
 
-  it("caps at the limit and appends the sentinel", function()
+  it("caps at the limit, appends the sentinel, and stops the walk", function()
     local rows = history.rows({ limit = 1 })
 
     assert.are.same({ 3, 0 }, { rows[1].seq, rows[2].seq })
+    local undos = 0
+    for _, command in ipairs(vim.commands) do
+      if command:match("^silent undo ") then
+        undos = undos + 1
+      end
+    end
+    assert.are.equal(5, undos)
   end)
 
   it("does not append the sentinel when the limit is not reached", function()
@@ -107,25 +114,29 @@ describe("history.next", function()
     }
   end
 
-  it("moves down by default and up with dir -1", function()
-    assert.are.equal(2, history.next(rows(), 1))
+  it("moves down with dir 1 and up with dir -1", function()
+    assert.are.equal(2, history.next(rows(), 1, { dir = 1 }))
     assert.are.equal(2, history.next(rows(), 3, { dir = -1 }))
   end)
 
   it("skips non-save rows when written", function()
-    assert.are.equal(2, history.next(rows(), 1, { written = true }))
+    assert.are.equal(2, history.next(rows(), 1, { dir = 1, written = true }))
     assert.are.equal(2, history.next(rows(), 3, { dir = -1, written = true }))
     local candidates = {
       { seq = 3, time = 0, added = {}, removed = {}, label = "", save = nil },
       { seq = 2, time = 0, added = {}, removed = {}, label = "", save = nil },
       { seq = 1, time = 0, added = {}, removed = {}, label = "", save = 1 },
     }
-    assert.are.equal(3, history.next(candidates, 1, { written = true }))
+    assert.are.equal(3, history.next(candidates, 1, { dir = 1, written = true }))
   end)
 
   it("clamps at the edges", function()
-    assert.are.equal(3, history.next(rows(), 3))
+    assert.are.equal(3, history.next(rows(), 3, { dir = 1 }))
     assert.are.equal(1, history.next(rows(), 1, { dir = -1 }))
+  end)
+
+  it("returns the index unchanged for dir 0", function()
+    assert.are.equal(1, history.next(rows(), 1, { dir = 0 }))
   end)
 end)
 

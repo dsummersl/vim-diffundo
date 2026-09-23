@@ -40,6 +40,11 @@ CONTENTS                                                     *diffundo-contents*
     selected state in the diff split, |/| filters the list (a Vim regex,
     empty to clear it) and q or <esc> closes it.
 
+    The |:Diffundo-earlier|, |:Diffundo-later| and |:Diffundo-search|
+    commands open the float by default; a leading -no-history flag or
+    g:diffundo_history = false keeps the minimal layout, and
+    g:diffundo_history_width (default 40) sets the width.
+
 The diff window's 'statusline' and 'winbar' show the timestamp and
 sequence number (|changenr()|) of the state it displays.
 

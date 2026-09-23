@@ -65,13 +65,12 @@ function M.rows(opts)
   restore.within_source(function()
     local count = 0
     for step in walker.steps(vim.fn.undotree().seq_last + 1) do
-      if count < limit then
-        table.insert(collected, M.row_for(step))
-        count = count + 1
-      elseif count == limit then
+      if count == limit then
         table.insert(collected, older)
-        count = count + 1
+        break
       end
+      table.insert(collected, M.row_for(step))
+      count = count + 1
     end
   end)
   return collected
@@ -104,15 +103,17 @@ end
 
 ---@param rows diffundo.Row[]
 ---@param index integer
----@param opts { dir?: integer, written?: boolean }|nil
+---@param opts { dir: integer, written?: boolean }
 ---@return integer
 function M.next(rows, index, opts)
-  local options = opts or {}
-  local dir = options.dir or 1
+  local dir = opts.dir
+  if dir == 0 then
+    return index
+  end
   local candidate = index + dir
   local last = #rows
   while inside_bounds(candidate, last) do
-    if should_skip(options, rows[candidate]) then
+    if should_skip(opts, rows[candidate]) then
       candidate = candidate + dir
     else
       return candidate

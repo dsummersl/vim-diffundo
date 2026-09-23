@@ -40,7 +40,11 @@ local function pick_source()
       return found
     end
   end
-  return vim.t.diffundo_history_source_win or vim.api.nvim_get_current_win()
+  local candidate = vim.t.diffundo_history_source_win or vim.api.nvim_get_current_win()
+  if not window.is_open(candidate) then
+    error("The diffundo source window is no longer open in this tab.", 0)
+  end
+  return candidate
 end
 
 ---@return string[]
@@ -85,7 +89,6 @@ function M.open()
     return false
   end
   local source = vim.api.nvim_get_current_win()
-  vim.api.nvim_set_current_win(source)
   local collected = history.rows({})
   vim.t.diffundo_history_source_win = source
   vim.t.diffundo_history_rows = collected

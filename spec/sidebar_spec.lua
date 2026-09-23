@@ -106,6 +106,22 @@ describe("sidebar.reveal and the filter", function()
   end)
 end)
 
+describe("the float's keymaps", function()
+  it("drives move, filter, place and close", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    sidebar.open()
+
+    vim:press("J")
+    vim:press("K")
+    vim:press("/")
+    vim:press("<cr>")
+    vim:press("q")
+    sidebar.open()
+    vim:press("<esc>")
+  end)
+end)
+
 describe("sidebar.place", function()
   it("shows the selected state in the diff split and keeps the float", function()
     local vim = fakevim.new(history())
@@ -147,6 +163,15 @@ describe("sidebar.place", function()
 
     assert.is_true(pcall(sidebar.place))
     assert.are.equal(3, vim.t.diffundo_diff_undonr)
+  end)
+
+  it("raises the documented error when the recorded source window is gone", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    sidebar.open()
+    vim.t.diffundo_history_source_win = 9999
+
+    assert.has_error(sidebar.place, "The diffundo source window is no longer open in this tab.")
   end)
 end)
 

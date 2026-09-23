@@ -35,5 +35,6 @@ change.
   users never see the float.
 - The fake models floats, buffer-local keymaps (fake:press) and vim.input;
   e2e detects floats via nvim_win_get_config().relative.
-- Walking the whole history per float open is finite (the limit cap and the
-  …older… sentinel); the ADR-4 memoisation remains the measured fallback.
+- The walk for a float open stops at the limit cap, which also bounds the
+  collection; the …older… sentinel marks the cut. The ADR-4 memoisation
+  remains the measured fallback.
