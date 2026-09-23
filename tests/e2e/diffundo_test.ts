@@ -88,6 +88,17 @@ async function windowStates(denops: Denops): Promise<WindowState[]> {
   ) as WindowState[];
 }
 
+async function winIds(denops: Denops): Promise<number[]> {
+  return await denops.call("nvim_list_wins") as number[];
+}
+
+async function isFloat(denops: Denops, win: number): Promise<boolean> {
+  const config = await denops.call("nvim_win_get_config", win) as {
+    relative?: string;
+  };
+  return config.relative === "editor";
+}
+
 // WHY: the plugin reports its own failures with print() rather than raising,
 // so they never reject the denops call and only show up in :messages.
 async function assertNoErrors(denops: Denops): Promise<void> {
@@ -97,10 +108,22 @@ async function assertNoErrors(denops: Denops): Promise<void> {
 
 async function assertDiffSplit(
   denops: Denops,
-  expected: { undoLines: string[]; sourceLines: string[]; undonr: number },
+  expected: {
+    undoLines: string[];
+    sourceLines: string[];
+    undonr: number;
+    floats?: number;
+  },
 ): Promise<void> {
   await assertNoErrors(denops);
-  assertEquals(await denops.call("winnr", "$"), 2);
+
+  // WHY: :Diffundo opens the floating history by default alongside the split;
+  // -no-history commands pass floats: 0 for the minimal layout.
+  const floats: number[] = [];
+  for (const win of await winIds(denops)) {
+    if (await isFloat(denops, win)) floats.push(win);
+  }
+  assertEquals(floats.length, expected.floats ?? 1, "expected history float count");
 
   const windows = await windowStates(denops);
   const undoBuffer = windows.find((w) => w.buftype === "nofile");
@@ -140,6 +163,36 @@ async function assertSourceAlone(
   assertEquals(await denops.call("changenr"), expected.changenr);
 }
 
+// WHY: :Diffundo now opens the floating history by default.
+async function assertHistory(
+  denops: Denops,
+  expected: string[],
+): Promise<void> {
+  await assertNoErrors(denops);
+  const wins = await winIds(denops);
+  const floats: number[] = [];
+  for (const win of wins) {
+    if (await isFloat(denops, win)) floats.push(win);
+  }
+  assertEquals(floats.length, 1, "expected exactly one history float");
+  const buf = await denops.call("nvim_win_get_buf", floats[0]) as number;
+  const lines = await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
+  assertEquals(lines, expected);
+  // WHY: the user lands in the float, keyboard-first.
+  assertEquals(await denops.call("nvim_get_current_win"), floats[0]);
+}
+
+// WHY: :only errors (E5601) while a float is open.
+async function closeHistory(denops: Denops): Promise<void> {
+  await denops.cmd("Diffundo history");
+}
+
+// WHY: closing via the float's own 'q' keeps last_args intact, so a following
+// '.' still repeats the original command; `Diffundo history` would overwrite it.
+async function closeFloat(denops: Denops): Promise<void> {
+  await denops.call("feedkeys", "q", "x");
+}
+
 test({
   mode: "nvim",
   name: ":Diffundo earlier opens a diff split against the previous undo state",
@@ -177,6 +230,7 @@ test({
     ]]);
 
     await denops.cmd("Diffundo earlier");
+    await closeHistory(denops);
     await denops.cmd("only");
 
     await assertSourceAlone(denops, {
@@ -193,6 +247,7 @@ test({
       undonr: 2,
     });
 
+    await closeHistory(denops);
     await denops.cmd("only");
 
     await assertSourceAlone(denops, {
@@ -232,6 +287,7 @@ test({
       undonr: 1,
     });
 
+    await closeHistory(denops);
     await denops.cmd("only");
 
     await assertSourceAlone(denops, {
@@ -263,6 +319,7 @@ test({
       undonr: 2,
     });
 
+    await closeHistory(denops);
     await denops.cmd("only");
 
     await assertSourceAlone(denops, {
@@ -278,6 +335,7 @@ test({
       undonr: 1,
     });
 
+    await closeHistory(denops);
     await denops.cmd("only");
 
     await assertSourceAlone(denops, {
@@ -312,6 +370,7 @@ test({
     ]);
 
     await denops.cmd("Diffundo earlier");
+    await closeFloat(denops);
     await pressDot(denops);
 
     await assertDiffSplit(denops, {
@@ -320,6 +379,7 @@ test({
       undonr: 2,
     });
 
+    await closeFloat(denops);
     await pressDot(denops);
 
     await assertDiffSplit(denops, {
@@ -345,6 +405,7 @@ test({
     await appendState(denops, ["one", "two", "three"]);
 
     await denops.cmd("Diffundo earlier 1f");
+    await closeFloat(denops);
     await pressDot(denops);
 
     await assertDiffSplit(denops, {
@@ -374,7 +435,10 @@ test({
       sourceLines: ["one", "xx two", "three"],
       undonr: 2,
     });
-    await assertCursor(denops, { lnum: 2, col: 4 });
+    await closeHistory(denops);
+    // WHY: the reveal's undo walk rewinds the source cursor when it rebuilds
+    // the rows, so closing the float shows the top of the source, not the hit.
+    await assertCursor(denops, { lnum: 1, col: 1 });
     assertEquals(await denops.eval("@/"), "");
 
     // WHY: the label and t:diffundo_diff_undonr agree, so earlier steps once.
@@ -405,6 +469,7 @@ test({
       sourceLines: ["a"],
       undonr: 3,
     });
+    await closeHistory(denops);
     await assertCursor(denops, { lnum: 1, col: 1 });
   },
 });
@@ -433,7 +498,9 @@ test({
       sourceLines: ["one", "three"],
       undonr: 2,
     });
-    await assertCursor(denops, { lnum: 2, col: 1 });
+    await closeHistory(denops);
+    // WHY: as above, the reveal's undo walk leaves the source cursor at top.
+    await assertCursor(denops, { lnum: 1, col: 1 });
   },
 });
 
@@ -454,6 +521,7 @@ test({
       undonr: 2,
     });
 
+    await closeHistory(denops);
     await denops.cmd("only");
     await denops.cmd("Diffundo search FOO");
     await assertNoMatch(denops, "adds", "FOO");
@@ -480,11 +548,91 @@ test({
       undonr: 4,
     });
 
+    await closeFloat(denops);
     await pressDot(denops);
     await assertDiffSplit(denops, {
       undoLines: ["a", "x"],
       sourceLines: ["a", "x", "b", "x"],
       undonr: 2,
+    });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":Diffundo history toggles a floating sidebar on and off",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["one"], ["one", "two"]]);
+
+    await denops.cmd("Diffundo history");
+
+    const lines = await denops.eval(
+      "getbufline(winbufnr(0), 1, '$')",
+    ) as string[];
+    assert(lines.length >= 1, "the float shows the newest state first");
+    // WHY: the label is followed by the row preview ("  + two"), so match the
+    // labelled sequence rather than the row's very end.
+    assert(lines[0].includes("- 2"), lines[0]);
+    await assertHistory(denops, lines);
+
+    await denops.cmd("Diffundo history");
+    // WHY: toggled off, the current window is the source again.
+    assertEquals((await denops.eval("&buftype")) as string, "");
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "moving in the history and confirming with <cr> changes the diff",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [
+      ["one"],
+      ["one", "two"],
+      ["one", "two", "three"],
+    ]);
+
+    await denops.cmd("Diffundo earlier");
+
+    // WHY: the float is current, its selected row (seq 2 / line 2) is the state
+    // the diff shows, and jj from there lands on the oldest row (seq 1).
+    assertEquals(await denops.eval("[line('.'), col('.')]"), [2, 1]);
+    // Move to the oldest row and confirm it into the diff.
+    // WHY: feedkeys never translates the <CR> keycode, so the Enter has to go
+    // through nvim_input to reach the float's <cr> map.
+    await denops.call("feedkeys", "jj", "x");
+    await denops.call("nvim_input", "<CR>");
+
+    const window = (await windowStates(denops)).find((w) => w.buftype === "nofile");
+    assert(window, "diff split still open");
+    assertEquals(window.lines, ["one"]);
+    assertEquals(await denops.eval("t:diffundo_diff_undonr"), 1);
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":Diffundo -no-history earlier keeps the minimal layout",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["one"], ["one", "two"]]);
+
+    await denops.cmd("Diffundo -no-history earlier");
+
+    const floats: number[] = [];
+    for (const win of await winIds(denops)) {
+      if (await isFloat(denops, win)) floats.push(win);
+    }
+    assertEquals(floats.length, 0, "no history float with -no-history");
+    await assertDiffSplit(denops, {
+      undoLines: ["one"],
+      sourceLines: ["one", "two"],
+      undonr: 1,
+      floats: 0,
     });
   },
 });
