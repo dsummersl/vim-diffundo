@@ -65,6 +65,20 @@ describe("window.open", function()
 
     assert.are.equal(6, vim.windows[win].config.height)
   end)
+
+  it("defaults to row 0 and focuses the float", function()
+    local win = window.open({ lines = { "one" }, width = 40 })
+
+    assert.are.equal(0, vim.windows[win].config.row)
+    assert.are.equal(win, vim.current_win)
+  end)
+
+  it("honors row and leaves the current window alone with enter=false", function()
+    local win = window.open({ lines = { "one" }, width = 40, row = 5, enter = false })
+
+    assert.are.equal(5, vim.windows[win].config.row)
+    assert.are_not.equal(win, vim.current_win)
+  end)
 end)
 
 describe("window.render and window.map", function()
@@ -82,6 +96,26 @@ describe("window.render and window.map", function()
 
     assert.are.same({ "one", "two", "three" }, vim.buffers[vim.windows[win].buf].lines)
     assert.are.equal(3, vim.windows[win].config.height)
+  end)
+
+  it("keeps opts.height when rendering", function()
+    local win = window.open({ lines = { "one" }, width = 40 })
+
+    window.render(win, { "one", "two" }, { height = 8 })
+
+    assert.are.equal(8, vim.windows[win].config.height)
+  end)
+
+  it("does not shrink below opts.height when lines exceed it", function()
+    local win = window.open({ lines = { "one" }, width = 40 })
+    local lines = {}
+    for index = 1, 10 do
+      lines[index] = "row " .. index
+    end
+
+    window.render(win, lines, { height = 8 })
+
+    assert.are.equal(8, vim.windows[win].config.height)
   end)
 
   it("binds a normal-mode keymap to the buffer", function()
@@ -114,6 +148,18 @@ describe("window.close and window.is_open", function()
 end)
 
 describe("fake: highlight and fold APIs", function()
+  it("reports a float's config from the api", function()
+    local vim = fakevim.new(fakevim.history({ {}, { "a" } }))
+    vim:install()
+    local win = window.open({ lines = { "one" }, width = 40, row = 3 })
+
+    local config = vim.api.nvim_win_get_config(win)
+
+    assert.are.equal(3, config.row)
+    assert.are.equal(40, config.width)
+    assert.are.equal("editor", config.relative)
+  end)
+
   it("records highlights and clears the namespace", function()
     local vim = fakevim.new(fakevim.history({ {}, { "a" } }))
     vim:install()

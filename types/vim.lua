@@ -29,6 +29,7 @@
 ---@field nvim_open_win fun(buffer: integer, enter: boolean, config: table): integer
 ---@field nvim_win_close fun(window: integer, force: boolean)
 ---@field nvim_win_set_config fun(window: integer, config: table)
+---@field nvim_win_get_config fun(window: integer): table
 ---@field nvim_buf_set_keymap fun(buffer: integer, mode: string, lhs: string, rhs: string, opts: table)
 ---@field nvim_buf_delete fun(buffer: integer, opts: table)
 ---@field nvim_create_user_command fun(name: string, command: fun(opts: { args: string }), opts: table)

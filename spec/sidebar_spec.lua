@@ -12,6 +12,12 @@ local function float_win(vim)
   return vim.t.diffundo_history_win
 end
 
+---@param vim table
+---@return integer|nil
+local function footer_win(vim)
+  return vim.t.diffundo_history_footer_win
+end
+
 ---@param map table|nil
 ---@return integer
 local function count_keymaps(map)
@@ -30,25 +36,30 @@ describe("sidebar.open", function()
     vim:install()
   end)
 
-  it("opens a focused float", function()
+  it("opens a focused float with an unfocused footer", function()
     assert.is_true(sidebar.open())
 
     local win = float_win(vim)
     assert.are_not.equal(nil, win)
     assert.are.equal(win, vim.current_win)
+    local footer = footer_win(vim)
+    assert.are_not.equal(nil, footer)
+    assert.are_not.equal(footer, vim.current_win)
     assert.are.equal("nofile", vim.buffers[vim.windows[win].buf].options.buftype)
   end)
 
-  it("renders one line per state with the footer as the last two lines", function()
+  it("renders rows only in the tree and the footer in its own float", function()
     sidebar.open()
 
-    local buf = vim.buffers[vim.windows[float_win(vim)].buf]
-    assert.are.equal(36, #buf.lines)
-    assert.matches("^│%+ c", buf.lines[1])
-    assert.matches("^│%+ b", buf.lines[2])
-    assert.matches("^└%+ a", buf.lines[3])
-    assert.matches("^#", buf.lines[#buf.lines - 1])
-    assert.matches("help: g%?", buf.lines[#buf.lines])
+    local tree = vim.buffers[vim.windows[float_win(vim)].buf]
+    local footer = vim.buffers[vim.windows[footer_win(vim)].buf]
+    assert.are.equal(3, #tree.lines)
+    assert.matches("^│%+ c", tree.lines[1])
+    assert.matches("^│%+ b", tree.lines[2])
+    assert.matches("^└%+ a", tree.lines[3])
+    assert.are.equal(2, #footer.lines)
+    assert.matches("^#", footer.lines[1])
+    assert.matches("help: g%?", footer.lines[2])
   end)
 
   it("lands the cursor on the current diff state", function()
@@ -100,25 +111,27 @@ describe("sidebar.reveal and the filter", function()
       return "b"
     end
     sidebar.filter()
-    assert.are.equal(36, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(1, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
 
     sidebar.reveal(3)
 
-    assert.are.equal(36, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(3, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
     assert.are.same({ 1, 0 }, vim.windows[float_win(vim)].cursor)
   end)
 
-  it("keeps the float rendering when the filter matches nothing", function()
+  it("keeps the floats rendering when the filter matches nothing", function()
     vim.fn.input = function()
       return "zzzz"
     end
 
     assert.is_true(pcall(sidebar.filter))
 
-    local buf = vim.buffers[vim.windows[float_win(vim)].buf]
-    assert.matches("no matches", buf.lines[#buf.lines - 1])
-    assert.matches("0/3", buf.lines[#buf.lines])
-    assert.matches("help: g%?", buf.lines[#buf.lines])
+    local tree = vim.buffers[vim.windows[float_win(vim)].buf]
+    local footer = vim.buffers[vim.windows[footer_win(vim)].buf]
+    assert.are.equal(0, #tree.lines)
+    assert.matches("no matches", footer.lines[1])
+    assert.matches("0/3", footer.lines[2])
+    assert.matches("help: g%?", footer.lines[2])
   end)
 end)
 
@@ -219,13 +232,13 @@ describe("sidebar.move_save and sidebar.filter", function()
     sidebar.filter()
 
     local buf = vim.buffers[vim.windows[float_win(vim)].buf]
-    assert.are.equal(36, #buf.lines)
+    assert.are.equal(1, #buf.lines)
     assert.matches("b", buf.lines[1])
 
     asked = ""
     sidebar.filter()
 
-    assert.are.equal(36, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(3, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
   end)
 end)
 
@@ -239,6 +252,7 @@ describe("sidebar.close and sidebar.toggle", function()
     sidebar.close()
 
     assert.is_nil(vim.t.diffundo_history_win)
+    assert.is_nil(vim.t.diffundo_history_footer_win)
     assert.are.equal(source, vim.current_win)
   end)
 
@@ -255,15 +269,18 @@ describe("sidebar.close and sidebar.toggle", function()
 end)
 
 describe("sidebar layout integration", function()
-  it("renders via history.display with a footer", function()
+  it("renders the tree from history.display and the footer separately", function()
     local vim = fakevim.new(history())
     vim:install()
     sidebar.open()
 
-    local buf = vim.buffers[vim.windows[float_win(vim)].buf]
-    assert.is_not_nil(vim.t.diffundo_history_display)
-    assert.are.equal(#vim.t.diffundo_history_display.lines, #buf.lines)
-    assert.matches("help: g?", buf.lines[#buf.lines])
+    local display = vim.t.diffundo_history_display
+    local tree = vim.buffers[vim.windows[float_win(vim)].buf]
+    local footer = vim.buffers[vim.windows[footer_win(vim)].buf]
+    assert.is_not_nil(display)
+    assert.are.equal(display.footer_start - 1, #tree.lines)
+    assert.are.equal(2, #footer.lines)
+    assert.matches("help: g?", footer.lines[2])
   end)
 
   it("creates manual folds for long runs and collapses them", function()

@@ -7,8 +7,35 @@ local window = require("diffundo.window")
 local M = {}
 
 ---@return integer|nil
-local function win()
+local function tree_win()
   return vim.t.diffundo_history_win
+end
+
+---@return integer|nil
+local function footer_win()
+  return vim.t.diffundo_history_footer_win
+end
+
+---@return integer
+local function panel_height()
+  return math.max(4, vim.o.lines - 4)
+end
+
+---@return integer
+local function tree_height()
+  return panel_height() - 2
+end
+
+---@param lines string[]
+---@param first integer
+---@param last integer
+---@return string[]
+local function slice(lines, first, last)
+  local result = {}
+  for line = first, last do
+    result[#result + 1] = lines[line]
+  end
+  return result
 end
 
 ---@return diffundo.Row[]
@@ -77,11 +104,24 @@ local function fold_min()
   return vim.g.diffundo_fold_min or 3
 end
 
+---@return integer|nil, integer|nil
+local function floats()
+  local tree = tree_win()
+  if not window.is_open(tree) then
+    return nil
+  end
+  local footer = footer_win()
+  if not window.is_open(footer) then
+    return nil
+  end
+  return tree, footer
+end
+
 local history_ns
 
 local function render_float()
-  local float = win()
-  if float == nil or not window.is_open(float) then
+  local tree, footer = floats()
+  if tree == nil or footer == nil then
     return
   end
   local display = history.display(vim.t.diffundo_history_view, {
@@ -90,18 +130,18 @@ local function render_float()
     selected = current_index(),
     total = #rows(),
     fold_min = fold_min(),
-    height = vim.o.lines - 4,
   })
   vim.t.diffundo_history_display = display
-  local buf = vim.api.nvim_win_get_buf(float)
-  window.render(float, display.lines)
+  local tree_buf = vim.api.nvim_win_get_buf(tree)
+  window.render(tree, slice(display.lines, 1, display.footer_start - 1), { height = tree_height() })
+  window.render(footer, slice(display.lines, display.footer_start, #display.lines), { height = 2 })
   if history_ns == nil then
     history_ns = vim.api.nvim_create_namespace("diffundo_history")
   end
-  vim.api.nvim_buf_clear_namespace(buf, history_ns, 0, -1)
+  vim.api.nvim_buf_clear_namespace(tree_buf, history_ns, 0, -1)
   for _, span in ipairs(display.spans) do
     vim.api.nvim_buf_add_highlight(
-      buf,
+      tree_buf,
       history_ns,
       span.hl,
       span.line,
@@ -109,7 +149,7 @@ local function render_float()
       span.col_end
     )
   end
-  vim.api.nvim_buf_call(buf, function()
+  vim.api.nvim_buf_call(tree_buf, function()
     vim.wo.foldmethod = "manual"
     vim.cmd("normal! zE")
     for _, fold in ipairs(display.folds) do
@@ -153,7 +193,7 @@ end
 ---@param seq integer|nil
 local function select_row(seq)
   local index = index_of_seq(seq)
-  local float = win()
+  local float = tree_win()
   if index and float then
     reveal_line(float, to_line(index))
   end
@@ -161,7 +201,7 @@ end
 
 ---@return boolean
 function M.open()
-  local current = win()
+  local current = tree_win()
   if current and window.is_open(current) then
     vim.api.nvim_set_current_win(current)
     return true
@@ -176,31 +216,41 @@ function M.open()
   vim.t.diffundo_history_rows = collected
   vim.t.diffundo_history_view = collected
   vim.t.diffundo_history_filter = nil
-  local float = window.open({
+  local tree = window.open({
     lines = {},
     width = width(),
-    height = vim.o.lines - 4,
+    height = tree_height(),
+    row = 0,
+    enter = true,
   })
-  vim.t.diffundo_history_win = float
-  window.map(float, "J", function()
+  vim.t.diffundo_history_win = tree
+  local footer = window.open({
+    lines = { "", "" },
+    width = width(),
+    height = 2,
+    row = panel_height() - 2,
+    enter = false,
+  })
+  vim.t.diffundo_history_footer_win = footer
+  window.map(tree, "J", function()
     M.move_save(1)
   end)
-  window.map(float, "K", function()
+  window.map(tree, "K", function()
     M.move_save(-1)
   end)
-  window.map(float, "<cr>", function()
+  window.map(tree, "<cr>", function()
     M.place()
   end)
-  window.map(float, "/", function()
+  window.map(tree, "/", function()
     M.filter()
   end)
-  window.map(float, "q", function()
+  window.map(tree, "q", function()
     M.close()
   end)
-  window.map(float, "<esc>", function()
+  window.map(tree, "<esc>", function()
     M.close()
   end)
-  window.map(float, "g?", function()
+  window.map(tree, "g?", function()
     vim.notify("J/K saved jumps · <cr> place · / filter · g? help · q close")
   end)
   render_float()
@@ -213,7 +263,7 @@ function M.reveal(seq)
   if not M.open() then
     return
   end
-  local float = win()
+  local float = tree_win()
   if float and index_of_seq(seq) == nil then
     vim.t.diffundo_history_filter = nil
     vim.t.diffundo_history_view = rows()
@@ -223,7 +273,7 @@ function M.reveal(seq)
 end
 
 function M.place()
-  local float = win()
+  local float = tree_win()
   local row = row_at(float)
   if row == nil then
     return
@@ -245,7 +295,7 @@ end
 
 ---@param dir integer
 function M.move_save(dir)
-  local float = win()
+  local float = tree_win()
   if float == nil or not window.is_open(float) then
     return
   end
@@ -265,22 +315,37 @@ function M.filter()
     vim.t.diffundo_history_filter = pattern.compile(asked)
     vim.t.diffundo_history_view = history.filtered(rows(), vim.t.diffundo_history_filter)
   end
-  local float = win()
+  local float = tree_win()
   if float and window.is_open(float) then
     render_float()
   end
 end
 
+---@return integer
+local function fallback_win()
+  return vim.t.diffundo_history_source_win or vim.api.nvim_get_current_win()
+end
+
+---@param win integer|nil
+local function close_float(win)
+  if win == nil then
+    return
+  end
+  if window.is_open(win) then
+    window.close(win)
+  end
+end
+
 function M.close()
-  local float = win()
+  local float = tree_win()
   if float == nil then
     return
   end
-  local fallback = vim.t.diffundo_history_source_win or vim.api.nvim_get_current_win()
-  if window.is_open(float) then
-    window.close(float)
-  end
+  local fallback = fallback_win()
+  close_float(float)
+  close_float(footer_win())
   vim.t.diffundo_history_win = nil
+  vim.t.diffundo_history_footer_win = nil
   vim.t.diffundo_history_source_win = nil
   vim.t.diffundo_history_rows = nil
   vim.t.diffundo_history_view = nil
@@ -292,7 +357,7 @@ function M.close()
 end
 
 function M.toggle()
-  if window.is_open(win()) then
+  if window.is_open(tree_win()) then
     M.close()
   else
     M.open()

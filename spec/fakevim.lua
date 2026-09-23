@@ -275,11 +275,13 @@ local function api(self)
     nvim_buf_is_valid = function(bufnr)
       return self.buffers[bufnr] ~= nil
     end,
-    nvim_buf_get_lines = function()
-      return copy(current_buffer(self).lines)
+    nvim_buf_get_lines = function(bufnr)
+      local buf = bufnr == 0 and current_buffer(self).number or bufnr
+      return copy(self.buffers[buf].lines)
     end,
-    nvim_buf_set_lines = function(_, _, _, _, lines)
-      current_buffer(self).lines = copy(lines)
+    nvim_buf_set_lines = function(bufnr, _, _, _, lines)
+      local buf = bufnr == 0 and current_buffer(self).number or bufnr
+      self.buffers[buf].lines = copy(lines)
     end,
     nvim_buf_set_name = function(_, name)
       current_buffer(self).name = name
@@ -305,6 +307,14 @@ local function api(self)
       for key, value in pairs(config) do
         found.config[key] = value
       end
+    end,
+    nvim_win_get_config = function(win)
+      local found = window(self, win)
+      local result = {}
+      for key, value in pairs(found.config) do
+        result[key] = value
+      end
+      return result
     end,
     nvim_buf_set_keymap = function(buf, mode, lhs, _, opts)
       if mode ~= "n" then

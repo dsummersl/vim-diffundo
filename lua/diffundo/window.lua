@@ -1,12 +1,12 @@
 local M = {}
 
----@param opts { lines: string[], width: integer, height?: integer }
+---@param opts { lines: string[], width: integer, height?: integer, row?: integer, enter?: boolean }
 ---@return integer
 function M.open(opts)
   local buf = vim.api.nvim_create_buf(false, true)
-  local win = vim.api.nvim_open_win(buf, true, {
+  local win = vim.api.nvim_open_win(buf, opts.enter ~= false, {
     relative = "editor",
-    row = 0,
+    row = opts.row or 0,
     col = math.max(0, vim.o.columns - opts.width),
     width = opts.width,
     height = math.max(2, math.min(opts.height or #opts.lines, vim.o.lines - 4)),
@@ -20,11 +20,11 @@ end
 
 ---@param win integer
 ---@param lines string[]
-function M.render(win, lines)
+---@param opts { height?: integer }|nil
+function M.render(win, lines, opts)
   vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, lines)
-  vim.api.nvim_win_set_config(win, {
-    height = math.max(2, math.min(#lines, vim.o.lines - 4)),
-  })
+  local height = opts and opts.height or math.max(2, math.min(#lines, vim.o.lines - 4))
+  vim.api.nvim_win_set_config(win, { height = height })
 end
 
 ---@param win integer
