@@ -33,6 +33,13 @@ CONTENTS                                                     *diffundo-contents*
     (its parent in the undo tree, see |undo-branches|), so switching
     branches never counts as an addition or removal.
 
+:Diffundo history                                              *:Diffundo-history*
+    Open or toggle the floating history sidebar: one line per undo state
+    with a one-line preview of what that edit changed. In the sidebar
+    j/k move by change, J/K between written states, <cr> shows the
+    selected state in the diff split, |/| filters the list (a Vim regex,
+    empty to clear it) and q or <esc> closes it.
+
 The diff window's 'statusline' and 'winbar' show the timestamp and
 sequence number (|changenr()|) of the state it displays.
 
@@ -58,6 +65,11 @@ states with seq below `from_seq`, newest first, each `{ seq, parent,
 time, save, lines, parent_lines, added, removed }`. It runs |:undo| in the
 current buffer, so call it with the source buffer current and restore
 afterwards.
+
+`require("diffundo.history").rows(opts)` produces the sidebar's list the
+same way: newest first, each `{ seq, time, save, added, removed, label }`,
+with a `…older…` sentinel row once `opts.limit` (default 500) states are
+reached.
 
 ==============================================================================
 3. REPEATING                                                   *diffundo-repeat*

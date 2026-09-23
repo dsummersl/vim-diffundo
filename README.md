@@ -26,6 +26,13 @@ One command, `:Diffundo`, with subcommands (tab-completes):
 
 *:Diffundo search! {pattern}* : the same for a line that was **removed**.
 
+*:Diffundo history* : toggle the floating history sidebar — one line per undo
+state with a one-line preview of what that edit changed.
+
+In the sidebar: *j*/*k* move by change (or use counts, *gg*/*G*), *J*/*K* move
+between written states, *<cr>* shows the selected state in the diff split,
+*/* filters the list (vim regex, empty to clear), *q*/*<esc>* closes it.
+
 Search walks the undo *tree*: each state is compared with the state it was
 edited from, so switching undo branches never shows up as a change.
 
@@ -54,6 +61,15 @@ local gone = diffundo.search("TODO", { removed = true })
 `require("diffundo.walker").steps(from_seq)` is the iterator underneath: it
 yields `{ seq, parent, time, save, lines, parent_lines, added, removed }` per
 undo state, newest first, and must be called with the source buffer current.
+
+History sidebar
+---------------
+
+`:Diffundo earlier/later/search` open the history float by default;
+`:Diffundo -no-history earlier` (or `g:diffundo_history` = `false`) keeps the
+minimal layout. `g:diffundo_history_width` (default 40) sets the width. The
+float's rows come from `require("diffundo.history").rows`, the same list the
+future telescope/quickfix front-ends reuse.
 
 Setup
 -----
