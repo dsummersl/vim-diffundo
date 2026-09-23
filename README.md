@@ -84,7 +84,7 @@ right-aligned compact relative age (`now`, `2m`, `1h`, `3d`, `2w`, `4mo`,
 
 Runs of consecutive states on one branch collapse to a caption row
 (`+8 states: +5 -3 lines 8 undos`) — `zo`/`zc` open/fold one run, `zr`/`zm`
-all. A footer under `────` shows the selected state's sequence number,
+all. A footer shows the selected state's sequence number,
 saved/current state, absolute time and change totals, then `shown/total` and
 a right-aligned `help: g?` hint; `g?` in the sidebar notifies this key list.
 The float's rows come from `require("diffundo.history").rows`, the same list

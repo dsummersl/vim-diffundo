@@ -636,9 +636,10 @@ test({
     await denops.cmd("Diffundo earlier");
 
     // WHY: the float is current, its selected row (seq 2 / line 2) is the state
-    // the diff shows; the divider sits below the rows, so a single j lands on
-    // the last real row (line 3, the oldest state, seq 1) while jj would
-    // overshoot onto the divider, where <cr> has no row.
+    // the diff shows; the rows end at line 3, then come the footer and any
+    // padding, so a single j lands on the last real row (line 3, the oldest
+    // state, seq 1) while jj would overshoot onto the footer, where <cr> has
+    // no row.
     assertEquals(await denops.eval("[line('.'), col('.')]"), [2, 1]);
     // WHY: g? in the float must surface the key help, not an empty message.
     await denops.call("feedkeys", "g?", "x");

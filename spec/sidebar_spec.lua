@@ -39,16 +39,16 @@ describe("sidebar.open", function()
     assert.are.equal("nofile", vim.buffers[vim.windows[win].buf].options.buftype)
   end)
 
-  it("renders one line per state with a divider and footer, newest first", function()
+  it("renders one line per state with the footer as the last two lines", function()
     sidebar.open()
 
     local buf = vim.buffers[vim.windows[float_win(vim)].buf]
-    assert.are.equal(6, #buf.lines)
+    assert.are.equal(36, #buf.lines)
     assert.matches("^│%+ c", buf.lines[1])
     assert.matches("^│%+ b", buf.lines[2])
     assert.matches("^└%+ a", buf.lines[3])
-    assert.matches("^%-%-%-", buf.lines[4])
-    assert.matches("help: g%?", buf.lines[6])
+    assert.matches("^#", buf.lines[#buf.lines - 1])
+    assert.matches("help: g%?", buf.lines[#buf.lines])
   end)
 
   it("lands the cursor on the current diff state", function()
@@ -100,11 +100,11 @@ describe("sidebar.reveal and the filter", function()
       return "b"
     end
     sidebar.filter()
-    assert.are.equal(4, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(36, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
 
     sidebar.reveal(3)
 
-    assert.are.equal(6, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(36, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
     assert.are.same({ 1, 0 }, vim.windows[float_win(vim)].cursor)
   end)
 
@@ -116,10 +116,9 @@ describe("sidebar.reveal and the filter", function()
     assert.is_true(pcall(sidebar.filter))
 
     local buf = vim.buffers[vim.windows[float_win(vim)].buf]
-    assert.matches("^%-%-%-", buf.lines[1])
-    assert.matches("no matches", buf.lines[2])
-    assert.matches("0/3", buf.lines[3])
-    assert.matches("help: g%?", buf.lines[3])
+    assert.matches("no matches", buf.lines[#buf.lines - 1])
+    assert.matches("0/3", buf.lines[#buf.lines])
+    assert.matches("help: g%?", buf.lines[#buf.lines])
   end)
 end)
 
@@ -220,13 +219,13 @@ describe("sidebar.move_save and sidebar.filter", function()
     sidebar.filter()
 
     local buf = vim.buffers[vim.windows[float_win(vim)].buf]
-    assert.are.equal(4, #buf.lines)
+    assert.are.equal(36, #buf.lines)
     assert.matches("b", buf.lines[1])
 
     asked = ""
     sidebar.filter()
 
-    assert.are.equal(6, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
+    assert.are.equal(36, #vim.buffers[vim.windows[float_win(vim)].buf].lines)
   end)
 end)
 

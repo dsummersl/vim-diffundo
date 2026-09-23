@@ -681,8 +681,27 @@ local function emit_run(
   return i + 1
 end
 
+---@param buf_lines string[]
+---@param footer string[]
+---@param height integer|nil
+---@return integer
+local function append_footer(buf_lines, footer, height)
+  local padding = 0
+  if height then
+    padding = math.max(0, height - (#buf_lines + #footer))
+  end
+  local footer_start = #buf_lines + padding + 1
+  for _ = 1, padding do
+    buf_lines[#buf_lines + 1] = ""
+  end
+  for _, line in ipairs(footer) do
+    buf_lines[#buf_lines + 1] = line
+  end
+  return footer_start
+end
+
 ---@param view diffundo.Row[]
----@param opts { current?: integer, width: integer, selected?: integer, total?: integer, fold_min?: integer }
+---@param opts { current?: integer, width: integer, selected?: integer, total?: integer, fold_min?: integer, height?: integer }
 ---@return diffundo.Display
 function M.display(view, opts)
   local width = opts.width
@@ -718,16 +737,9 @@ function M.display(view, opts)
       )
     end
   end
-  local buf_lines = state.lines
-  buf_lines[state.buf] = string.rep("-", width)
-  local footer_start = state.buf
-  state.buf = state.buf + 1
-  for _, line in ipairs(footer_lines(view, opts, width)) do
-    buf_lines[state.buf] = line
-    state.buf = state.buf + 1
-  end
+  local footer_start = append_footer(state.lines, footer_lines(view, opts, width), opts.height)
   return {
-    lines = buf_lines,
+    lines = state.lines,
     spans = state.spans,
     folds = state.folds,
     row_to_line = state.row_to_line,

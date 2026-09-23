@@ -314,25 +314,36 @@ describe("history.display", function()
     assert.are.same({ 2, 3, 4, 5, 6 }, display.row_to_line)
   end)
 
-  it("appends the footer under a divider", function()
+  it("appends the footer below the rows", function()
     local rows = { row({ seq = 2, parent = 1 }), row({ seq = 1, parent = 0 }) }
     local display = history.display(rows, { width = 30, selected = 1, total = 4 })
 
     assert.are.equal(3, display.footer_start)
-    assert.matches("^%-%-%-", display.lines[3])
-    assert.matches("^#2", display.lines[4])
-    assert.matches("2/4", display.lines[5])
-    assert.matches("help: g%?$", display.lines[5])
+    assert.matches("^#2", display.lines[3])
+    assert.matches("2/4", display.lines[4])
+    assert.matches("help: g%?$", display.lines[4])
+    assert.are.equal(4, #display.lines)
+  end)
+
+  it("pads rows so the footer is the last two lines of opts.height", function()
+    local rows = { row({ seq = 2, parent = 1 }), row({ seq = 1, parent = 0 }) }
+    local display = history.display(rows, { width = 30, height = 8, selected = 1, total = 4 })
+
+    assert.are.equal(8, #display.lines)
+    assert.are.equal(7, display.footer_start)
+    assert.matches("^#2", display.lines[7])
+    assert.matches("2/4", display.lines[8])
+    assert.matches("help: g%?$", display.lines[8])
   end)
 
   it("renders an empty view with a no-matches footer", function()
     local display = history.display({}, { width = 30, total = 4 })
 
     assert.are.equal(1, display.footer_start)
-    assert.matches("^%-%-%-", display.lines[1])
-    assert.matches("no matches", display.lines[2])
-    assert.matches("0/4", display.lines[3])
-    assert.matches("help: g%?$", display.lines[3])
+    assert.matches("no matches", display.lines[1])
+    assert.matches("0/4", display.lines[2])
+    assert.matches("help: g%?$", display.lines[2])
+    assert.are.equal(2, #display.lines)
   end)
 
   it("never maps the sentinel row to a buffer line", function()
@@ -344,8 +355,8 @@ describe("history.display", function()
     local display = history.display(rows, { width = 30, total = 3 })
 
     assert.are.same({ 1, 2 }, display.row_to_line)
-    assert.matches("2/3", display.lines[5])
-    assert.are.equal(5, #display.lines)
+    assert.matches("2/3", display.lines[4])
+    assert.are.equal(4, #display.lines)
   end)
 
   it("folds a same-branch chain without counting the older sentinel", function()

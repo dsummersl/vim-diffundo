@@ -1,6 +1,6 @@
 local M = {}
 
----@param opts { lines: string[], title: string, width: integer }
+---@param opts { lines: string[], width: integer, height?: integer }
 ---@return integer
 function M.open(opts)
   local buf = vim.api.nvim_create_buf(false, true)
@@ -9,12 +9,11 @@ function M.open(opts)
     row = 0,
     col = math.max(0, vim.o.columns - opts.width),
     width = opts.width,
-    height = math.max(2, math.min(#opts.lines, vim.o.lines - 4)),
+    height = math.max(2, math.min(opts.height or #opts.lines, vim.o.lines - 4)),
   })
   vim.bo.buftype = "nofile"
   vim.bo.bufhidden = "wipe"
   vim.bo.swapfile = false
-  vim.wo.winbar = opts.title
   M.render(win, opts.lines)
   return win
 end

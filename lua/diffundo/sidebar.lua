@@ -90,6 +90,7 @@ local function render_float()
     selected = current_index(),
     total = #rows(),
     fold_min = fold_min(),
+    height = vim.o.lines - 4,
   })
   vim.t.diffundo_history_display = display
   local buf = vim.api.nvim_win_get_buf(float)
@@ -177,8 +178,8 @@ function M.open()
   vim.t.diffundo_history_filter = nil
   local float = window.open({
     lines = {},
-    title = "diffundo history",
     width = width(),
+    height = vim.o.lines - 4,
   })
   vim.t.diffundo_history_win = float
   window.map(float, "J", function()

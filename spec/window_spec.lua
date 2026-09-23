@@ -9,8 +9,8 @@ describe("window.open", function()
     vim:install()
   end)
 
-  it("creates a focused float in the upper right", function()
-    local win = window.open({ lines = { "one", "two" }, title = "diffundo history", width = 40 })
+  it("creates a focused float in the upper right with no winbar", function()
+    local win = window.open({ lines = { "one", "two" }, width = 40 })
 
     assert.are.equal(win, vim.current_win)
     local config = vim.windows[win].config
@@ -19,18 +19,18 @@ describe("window.open", function()
     assert.are.equal(40, config.col)
     assert.are.equal(40, config.width)
     assert.are.equal(2, config.height)
-    assert.are.equal("diffundo history", vim.windows[win].options.winbar)
+    assert.is_nil(vim.windows[win].options.winbar)
   end)
 
   it("clamps the column to the editor width", function()
     vim.o.columns = 30
-    local win = window.open({ lines = { "one" }, title = "t", width = 40 })
+    local win = window.open({ lines = { "one" }, width = 40 })
 
     assert.are.equal(0, vim.windows[win].config.col)
   end)
 
   it("configures a scratch buffer and fills the lines", function()
-    local win = window.open({ lines = { "one", "two" }, title = "t", width = 40 })
+    local win = window.open({ lines = { "one", "two" }, width = 40 })
     local buffer = vim.buffers[vim.windows[win].buf]
 
     assert.are.equal("nofile", buffer.options.buftype)
@@ -38,11 +38,32 @@ describe("window.open", function()
     assert.are.same({ "one", "two" }, buffer.lines)
   end)
 
+  it("honors opts.height for the drawn lines", function()
+    local lines = {}
+    for index = 1, 8 do
+      lines[index] = "row " .. index
+    end
+    local win = window.open({ lines = lines, height = 8, width = 40 })
+
+    assert.are.equal(8, vim.windows[win].config.height)
+  end)
+
   it("caps the height at the terminal", function()
     vim.o.lines = 5
-    local win = window.open({ lines = { "a", "b", "c" }, title = "t", width = 40 })
+    local win = window.open({ lines = { "a", "b", "c" }, width = 40 })
 
     assert.are.equal(2, vim.windows[win].config.height)
+  end)
+
+  it("caps opts.height at the terminal", function()
+    vim.o.lines = 10
+    local lines = {}
+    for index = 1, 36 do
+      lines[index] = "row " .. index
+    end
+    local win = window.open({ lines = lines, height = 36, width = 40 })
+
+    assert.are.equal(6, vim.windows[win].config.height)
   end)
 end)
 
@@ -55,7 +76,7 @@ describe("window.render and window.map", function()
   end)
 
   it("replaces lines and re-heights", function()
-    local win = window.open({ lines = { "one" }, title = "t", width = 40 })
+    local win = window.open({ lines = { "one" }, width = 40 })
 
     window.render(win, { "one", "two", "three" })
 
@@ -64,7 +85,7 @@ describe("window.render and window.map", function()
   end)
 
   it("binds a normal-mode keymap to the buffer", function()
-    local win = window.open({ lines = { "one" }, title = "t", width = 40 })
+    local win = window.open({ lines = { "one" }, width = 40 })
     local called = false
 
     window.map(win, "q", function()
@@ -82,7 +103,7 @@ describe("window.close and window.is_open", function()
     local vim = fakevim.new(fakevim.history({ {}, { "a" } }))
     vim:install()
 
-    local win = window.open({ lines = { "one" }, title = "t", width = 40 })
+    local win = window.open({ lines = { "one" }, width = 40 })
     local buf = vim.windows[win].buf
 
     window.close(win)
