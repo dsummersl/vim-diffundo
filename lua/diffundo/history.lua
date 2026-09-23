@@ -31,6 +31,13 @@ local M = {}
 ---@field row_to_line integer[]
 ---@field footer_start integer
 
+---@class diffundo.DisplayBuf
+---@field lines string[]
+---@field spans diffundo.Span[]
+---@field folds diffundo.Fold[]
+---@field row_to_line integer[]
+---@field buf integer
+
 local older = {
   seq = 0,
   time = 0,
@@ -41,18 +48,52 @@ local older = {
   label = "",
 }
 
+---@param a integer
+---@param r integer
+---@return boolean
+local function lone_added(a, r)
+  return a == 1 and r == 0
+end
+
+---@param a integer
+---@param r integer
+---@return boolean
+local function lone_removed(a, r)
+  return a == 0 and r == 1
+end
+
 ---@param row diffundo.Row
----@return string, { hl: string, from: integer, to: integer }[]
-local function preview_parts(row)
+---@return string, { hl: string, from: integer, to: integer }[], boolean
+local function single_edit(row)
   local a, r = #row.added, #row.removed
-  if a == 1 and r == 0 then
+  if lone_added(a, r) then
     local text = "+ " .. row.added[1]
-    return text, { { hl = "DiffAdd", from = 0, to = #text } }
+    return text, { { hl = "DiffAdd", from = 0, to = #text } }, true
   end
-  if a == 0 and r == 1 then
+  if lone_removed(a, r) then
     local text = "- " .. row.removed[1]
-    return text, { { hl = "DiffDelete", from = 0, to = #text } }
+    return text, { { hl = "DiffDelete", from = 0, to = #text } }, true
   end
+  return "", {}, false
+end
+
+---@param name string
+---@return string|nil
+local function name_hl(name)
+  local first = name:sub(1, 1)
+  if first == "+" then
+    return "DiffAdd"
+  end
+  if first == "-" then
+    return "DiffDelete"
+  end
+  return nil
+end
+
+---@param row diffundo.Row
+---@return string[]
+local function summary_names(row)
+  local a, r = #row.added, #row.removed
   local names = {}
   if a > 0 then
     names[#names + 1] = "+" .. a
@@ -64,17 +105,33 @@ local function preview_parts(row)
     names[#names + 1] = "+0"
   end
   names[#names + 1] = "lines"
-  local text = table.concat(names, " ")
+  return names
+end
+
+---@param names string[]
+---@return { hl: string, from: integer, to: integer }[]
+local function spans_for_names(names)
   local spans = {}
   local col = 0
   for _, name in ipairs(names) do
-    local hl = name:sub(1, 1) == "+" and "DiffAdd" or (name:sub(1, 1) == "-" and "DiffDelete")
+    local hl = name_hl(name)
     if hl then
       spans[#spans + 1] = { hl = hl, from = col, to = col + #name }
     end
     col = col + #name + 1
   end
-  return text, spans
+  return spans
+end
+
+---@param row diffundo.Row
+---@return string, { hl: string, from: integer, to: integer }[]
+local function preview_parts(row)
+  local text, spans, matched = single_edit(row)
+  if matched then
+    return text, spans
+  end
+  local names = summary_names(row)
+  return table.concat(names, " "), spans_for_names(names)
 end
 
 ---@param view diffundo.Row[]
@@ -94,8 +151,22 @@ function M.preview_parts(row)
 end
 
 ---@param view diffundo.Row[]
----@return integer[], integer[][]
-local function topology_for(view)
+---@return integer[]
+local function depth_for(view)
+  local depth = { 1 }
+  for i = 2, #view do
+    if view[i - 1].parent == view[i].seq then
+      depth[i] = depth[i - 1]
+    else
+      depth[i] = depth[i - 1] + 1
+    end
+  end
+  return depth
+end
+
+---@param view diffundo.Row[]
+---@return integer[][]
+local function children_for(view)
   local seq_index = {}
   for i, r in ipairs(view) do
     seq_index[r.seq] = i
@@ -108,15 +179,60 @@ local function topology_for(view)
       table.insert(children[parent], i)
     end
   end
-  local depth = { 1 }
-  for i = 2, #view do
-    if view[i - 1].parent == view[i].seq then
-      depth[i] = depth[i - 1]
-    else
-      depth[i] = depth[i - 1] + 1
+  return children
+end
+
+---@param view diffundo.Row[]
+---@return integer[], integer[][]
+local function topology_for(view)
+  return depth_for(view), children_for(view)
+end
+
+---@param is_current boolean
+---@param save boolean
+---@return string
+local function node_glyph(is_current, save)
+  if is_current then
+    if save then
+      return "◉"
     end
+    return "○"
   end
-  return depth, children
+  if save then
+    return "●"
+  end
+  return "│"
+end
+
+---@param k integer
+---@param tails integer
+---@return string
+local function arm_glyph(k, tails)
+  if k < tails then
+    return "┬"
+  end
+  return "┐"
+end
+
+---@param kids integer[]
+---@param i integer
+---@param last integer
+---@param is_current boolean
+---@param save boolean
+---@return string[]
+local function lane_cells(kids, i, last, is_current, save)
+  if #kids >= 2 then
+    local tails = #kids - 1
+    local cells = { "├" }
+    for k = 1, tails do
+      cells[#cells + 1] = arm_glyph(k, tails)
+    end
+    return cells
+  end
+  if i == last then
+    return { "└" }
+  end
+  return { node_glyph(is_current, save) }
 end
 
 ---@param i integer
@@ -127,21 +243,12 @@ end
 ---@param save boolean
 ---@return string
 local function gutter_for(i, depth, children, last, is_current, save)
-  local kids = children[i] or {}
   local cells = {}
   for c = 1, depth - 1 do
     cells[c] = "┊"
   end
-  if #kids >= 2 then
-    cells[depth] = "├"
-    for k = 1, #kids - 1 do
-      cells[depth + k] = k < #kids - 1 and "┬" or "┐"
-    end
-  elseif i == last then
-    cells[depth] = "└"
-  else
-    local glyph = is_current and (save and "◉" or "○") or (save and "●" or "│")
-    cells[depth] = glyph
+  for _, cell in ipairs(lane_cells(children[i] or {}, i, last, is_current, save)) do
+    cells[#cells + 1] = cell
   end
   return table.concat(cells, "")
 end
@@ -206,26 +313,111 @@ local function caption_for(view, first, count, depth, time_w, width)
     .. time
 end
 
+---@param index integer
+---@param size integer
+---@return integer
+local function clamp_index(index, size)
+  if index < 1 then
+    return 1
+  end
+  if index > size then
+    return size
+  end
+  return index
+end
+
+---@param r diffundo.Row
+---@param preview string
+---@param width integer
+---@return string
+local function status_line(r, preview, width)
+  local meaning = r.save and "● saved" or ""
+  local absolute = os.date("%Y-%m-%d %I:%M:%S %p", r.time)
+  local text = ("#%d %s %s %s"):format(r.seq, meaning, absolute, preview)
+  if #text > width then
+    return text:sub(1, width)
+  end
+  return text
+end
+
+---@param shown integer
+---@param total integer
+---@param width integer
+---@return string
+local function pager_line(shown, total, width)
+  local hint = "help: g?"
+  local text = ("%d/%d"):format(shown, total)
+  return text .. string.rep(" ", math.max(0, width - #text - #hint)) .. hint
+end
+
 ---@param view diffundo.Row[]
 ---@param opts { selected?: integer, total?: integer }
 ---@param width integer
 ---@return string[]
 local function footer_lines(view, opts, width)
-  local index = opts.selected and math.max(1, math.min(opts.selected, #view)) or 1
+  local index = clamp_index(opts.selected or 1, #view)
   local r = view[index]
-  local meaning = r.save and "● saved" or ""
-  local absolute = os.date("%Y-%m-%d %I:%M:%S %p", r.time)
   local preview, _ = preview_parts(r)
   local shown = #view
   local total = opts.total or shown
-  local line1 = ("#%d %s %s %s"):format(r.seq, meaning, absolute, preview)
-  if #line1 > width then
-    line1 = line1:sub(1, width)
+  return { status_line(r, preview, width), pager_line(shown, total, width) }
+end
+
+---@param view diffundo.Row[]
+---@param i integer
+---@return integer
+local function run_end_for(view, i)
+  local run_end = i
+  while run_end < #view and view[run_end].parent == view[run_end + 1].seq do
+    run_end = run_end + 1
   end
-  local hint = "help: g?"
-  local line2 = ("%d/%d"):format(shown, total)
-  line2 = line2 .. string.rep(" ", math.max(0, width - #line2 - #hint)) .. hint
-  return { line1, line2 }
+  return run_end
+end
+
+---@param view diffundo.Row[]
+---@param index integer
+---@param depth integer[]
+---@param children integer[][]
+---@param time_w integer
+---@param width integer
+---@param current integer|nil
+---@param state diffundo.DisplayBuf
+local function emit_row(view, index, depth, children, time_w, width, current, state)
+  local text, row_spans = row_line(view, index, depth, children, time_w, width, current)
+  state.row_to_line[index] = state.buf
+  state.lines[state.buf] = text
+  for _, span in ipairs(row_spans) do
+    span.line = state.buf - 1
+    state.spans[#state.spans + 1] = span
+  end
+  state.buf = state.buf + 1
+end
+
+---@param view diffundo.Row[]
+---@param i integer
+---@param run_end integer
+---@param fold_min integer
+---@param depth integer[]
+---@param children integer[][]
+---@param time_w integer
+---@param width integer
+---@param current integer|nil
+---@param state diffundo.DisplayBuf
+---@return integer
+local function emit_run(view, i, run_end, fold_min, depth, children, time_w, width, current, state)
+  local run_len = run_end - i + 1
+  if run_len > fold_min then
+    local start = state.buf
+    state.lines[start] = caption_for(view, i, run_len, depth, time_w, width)
+    state.buf = start + 1
+    for index = i, run_end do
+      emit_row(view, index, depth, children, time_w, width, current, state)
+    end
+    state.folds[#state.folds + 1] = { start = start, stop = start + run_len - 1 }
+    return run_end + 1
+  end
+  emit_row(view, i, depth, children, time_w, width, current, state)
+  return i + 1
 end
 
 ---@param view diffundo.Row[]
@@ -236,62 +428,31 @@ function M.display(view, opts)
   local depth, children = topology_for(view)
   local time_w = M.time_width(view)
   local fold_min = opts.fold_min or 3
-  local buf_lines = {}
-  local spans = {}
-  local folds = {}
-  local row_to_line = {}
-
-  local buf = 1
+  local state = {
+    lines = {},
+    spans = {},
+    folds = {},
+    row_to_line = {},
+    buf = 1,
+  }
   local i = 1
   while i <= #view do
-    local run_end = i
-    while run_end < #view and view[run_end].parent == view[run_end + 1].seq do
-      run_end = run_end + 1
-    end
-    local run_len = run_end - i + 1
-    if run_len > fold_min then
-      local caption = caption_for(view, i, run_len, depth, time_w, width)
-      buf_lines[buf] = caption
-      local fold_start = buf
-      buf = buf + 1
-      for index = i, run_end do
-        row_to_line[index] = buf
-        local text, row_spans = row_line(view, index, depth, children, time_w, width, opts.current)
-        buf_lines[buf] = text
-        for _, span in ipairs(row_spans) do
-          span.line = buf - 1
-          spans[#spans + 1] = span
-        end
-        buf = buf + 1
-      end
-      folds[#folds + 1] = { start = fold_start, stop = fold_start + run_len - 1 }
-      i = run_end + 1
-    else
-      row_to_line[i] = buf
-      local text, row_spans = row_line(view, i, depth, children, time_w, width, opts.current)
-      buf_lines[buf] = text
-      for _, span in ipairs(row_spans) do
-        span.line = buf - 1
-        spans[#spans + 1] = span
-      end
-      buf = buf + 1
-      i = i + 1
-    end
+    local run_end = run_end_for(view, i)
+    i = emit_run(view, i, run_end, fold_min, depth, children, time_w, width, opts.current, state)
   end
-
-  buf_lines[buf] = string.rep("-", width)
-  local footer_start = buf
-  buf = buf + 1
+  local buf_lines = state.lines
+  buf_lines[state.buf] = string.rep("-", width)
+  local footer_start = state.buf
+  state.buf = state.buf + 1
   for _, line in ipairs(footer_lines(view, opts, width)) do
-    buf_lines[buf] = line
-    buf = buf + 1
+    buf_lines[state.buf] = line
+    state.buf = state.buf + 1
   end
-
   return {
     lines = buf_lines,
-    spans = spans,
-    folds = folds,
-    row_to_line = row_to_line,
+    spans = state.spans,
+    folds = state.folds,
+    row_to_line = state.row_to_line,
     footer_start = footer_start,
   }
 end
