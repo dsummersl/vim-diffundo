@@ -33,7 +33,7 @@ CONTENTS                                                     *diffundo-contents*
     (its parent in the undo tree, see |undo-branches|), so switching
     branches never counts as an addition or removal.
 
-:Diffundo history                                              *:Diffundo-history*
+:Diffundo history                                          *:Diffundo-history*
     Open or toggle the floating history sidebar: one line per undo state
     with a one-line preview of what that edit changed. In the sidebar
     j/k move by change, J/K between written states, <cr> shows the
