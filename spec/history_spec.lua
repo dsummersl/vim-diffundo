@@ -36,36 +36,52 @@ describe("history.row_for", function()
   end)
 end)
 
-describe("history.render", function()
-  it("previews a single addition", function()
-    local row = history.row_for(step({ added = { "foo()" } }))
+describe("history.preview_parts", function()
+  local function row(over)
+    local base = { seq = 4, time = 1004, save = nil, added = {}, removed = {}, parent = 3 }
+    for key, value in pairs(over or {}) do
+      base[key] = value
+    end
+    return base
+  end
 
-    assert.matches("+ foo%(%)", history.render(row, 40))
+  it("shows a single added line colored DiffAdd", function()
+    local text, spans = history.preview_parts(row({ added = { "foo()" } }))
+
+    assert.are.equal("+ foo()", text)
+    assert.are.equal("DiffAdd", spans[1].hl)
+    assert.are.equal("+ foo()", text:sub(spans[1].from + 1, spans[1].to))
   end)
 
-  it("previews a single removal", function()
-    local row = history.row_for(step({ removed = { "bar" } }))
+  it("shows a single removed line colored DiffDelete", function()
+    local text, spans = history.preview_parts(row({ removed = { "bar()" } }))
 
-    assert.matches("%- bar", history.render(row, 40))
+    assert.are.equal("- bar()", text)
+    assert.are.equal("DiffDelete", spans[1].hl)
   end)
 
-  it("summarises mixed changes", function()
-    local row = history.row_for(step({ added = { "a", "b" }, removed = { "c" } }))
+  it("shows counts with the lines unit for mixed changes", function()
+    local text, spans = history.preview_parts(row({ added = { "a", "b" }, removed = { "c" } }))
 
-    assert.matches("~ 2 added, 1 removed", history.render(row, 40))
+    assert.are.equal("+2 -1 lines", text)
+    assert.are.equal("DiffAdd", spans[1].hl)
+    assert.are.equal("DiffDelete", spans[2].hl)
   end)
 
-  it("marks saved rows and truncates to the width", function()
-    local row = history.row_for(step({ save = 1 }))
-
-    assert.matches("%[saved%]", history.render(row, 40))
-    assert.is_true(#history.render(row, 40) <= 40)
+  it("omits zero sides and pluralises", function()
+    assert.are.equal("-3 lines", history.preview_parts(row({ removed = { "a", "b", "c" } })))
+    assert.are.equal("+2 lines", history.preview_parts(row({ added = { "a", "b" } })))
   end)
+end)
 
-  it("renders the sentinel as an ellipsis", function()
-    local sentinel = { seq = 0, time = 0, added = {}, removed = {}, label = "" }
+describe("history.time_width", function()
+  it("sizes the time column to the longest row", function()
+    local view = {
+      { seq = 3, time = os.time() - 2 * 86400 },
+      { seq = 2, time = os.time() - 120 },
+    }
 
-    assert.are.equal("…older…", history.render(sentinel, 40))
+    assert.are.equal(3, history.time_width(view))
   end)
 end)
 

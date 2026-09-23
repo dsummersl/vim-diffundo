@@ -11,6 +11,7 @@ local M = {}
 ---@field save integer|nil
 ---@field added string[]
 ---@field removed string[]
+---@field parent integer
 ---@field label string
 
 local older = {
@@ -19,29 +20,58 @@ local older = {
   save = nil,
   added = {},
   removed = {},
+  parent = 0,
   label = "",
 }
 
----@param text string
----@param width integer
----@return string
-local function truncate(text, width)
-  if #text <= width then
-    return text
+---@param row diffundo.Row
+---@return string, { hl: string, from: integer, to: integer }[]
+local function preview_parts(row)
+  local a, r = #row.added, #row.removed
+  if a == 1 and r == 0 then
+    local text = "+ " .. row.added[1]
+    return text, { { hl = "DiffAdd", from = 0, to = #text } }
   end
-  return text:sub(1, width)
+  if a == 0 and r == 1 then
+    local text = "- " .. row.removed[1]
+    return text, { { hl = "DiffDelete", from = 0, to = #text } }
+  end
+  local names = {}
+  if a > 0 then
+    names[#names + 1] = "+" .. a
+  end
+  if r > 0 then
+    names[#names + 1] = "-" .. r
+  end
+  if #names == 0 then
+    names[#names + 1] = "+0"
+  end
+  names[#names + 1] = "lines"
+  local text = table.concat(names, " ")
+  local spans = {}
+  local col = 0
+  for _, name in ipairs(names) do
+    local hl = name:sub(1, 1) == "+" and "DiffAdd" or (name:sub(1, 1) == "-" and "DiffDelete")
+    if hl then
+      spans[#spans + 1] = { hl = hl, from = col, to = col + #name }
+    end
+    col = col + #name + 1
+  end
+  return text, spans
 end
 
----@param row diffundo.Row
----@return string
-local function preview_for(row)
-  if #row.added == 1 and #row.removed == 0 then
-    return "+ " .. row.added[1]
+---@param view diffundo.Row[]
+---@return integer
+function M.time_width(view)
+  local longest = 1
+  for _, row in ipairs(view) do
+    longest = math.max(longest, #label.short(row.time))
   end
-  if #row.added == 0 and #row.removed == 1 then
-    return "- " .. row.removed[1]
-  end
-  return ("~ %d added, %d removed"):format(#row.added, #row.removed)
+  return longest + 1
+end
+
+function M.preview_parts(row)
+  return preview_parts(row)
 end
 
 ---@param step diffundo.Step
@@ -53,6 +83,7 @@ function M.row_for(step)
     save = step.save,
     added = step.added,
     removed = step.removed,
+    parent = step.parent,
     label = label.relative(step.time) .. " - " .. step.seq,
   }
 end
@@ -74,17 +105,6 @@ function M.rows(opts)
     end
   end)
   return collected
-end
-
----@param row diffundo.Row
----@param width integer
----@return string
-function M.render(row, width)
-  if row.seq == 0 then
-    return truncate("…older…", width)
-  end
-  local marker = row.save and " [saved]" or ""
-  return truncate(row.label .. marker .. "  " .. preview_for(row), width)
 end
 
 ---@param options { written?: boolean }
