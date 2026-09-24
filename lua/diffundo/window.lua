@@ -1,5 +1,17 @@
 local M = {}
 
+---@param win integer
+local function scrub_options(win)
+  vim.api.nvim_win_call(win, function()
+    vim.wo.signcolumn = "no"
+    vim.wo.foldcolumn = "0"
+    vim.wo.number = false
+    vim.wo.relativenumber = false
+    vim.wo.spell = false
+    vim.wo.wrap = false
+  end)
+end
+
 ---@param opts { lines: string[], width: integer, height?: integer, row?: integer, enter?: boolean }
 ---@return integer
 function M.open(opts)
@@ -11,6 +23,7 @@ function M.open(opts)
     width = opts.width,
     height = math.max(2, math.min(opts.height or #opts.lines, vim.o.lines - 4)),
   })
+  scrub_options(win)
   vim.bo.buftype = "nofile"
   vim.bo.bufhidden = "wipe"
   vim.bo.swapfile = false

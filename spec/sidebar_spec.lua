@@ -54,9 +54,9 @@ describe("sidebar.open", function()
     local tree = vim.buffers[vim.windows[float_win(vim)].buf]
     local footer = vim.buffers[vim.windows[footer_win(vim)].buf]
     assert.are.equal(3, #tree.lines)
-    assert.matches("^│%+ c", tree.lines[1])
-    assert.matches("^│%+ b", tree.lines[2])
-    assert.matches("^└%+ a", tree.lines[3])
+    assert.matches("^○ %+ c", tree.lines[1])
+    assert.matches("^│ %+ b", tree.lines[2])
+    assert.matches("^│ %+ a", tree.lines[3])
     assert.are.equal(2, #footer.lines)
     assert.matches("^#", footer.lines[1])
     assert.matches("help: g%?", footer.lines[2])
@@ -220,7 +220,7 @@ describe("sidebar.move_save and sidebar.filter", function()
 
     sidebar.move_save(-1)
 
-    assert.are.same({ 2, 0 }, vim.windows[float_win(vim)].cursor)
+    assert.are.same({ 1, 0 }, vim.windows[float_win(vim)].cursor)
   end)
 
   it("narrows the list and clears on an empty prompt", function()
@@ -283,10 +283,25 @@ describe("sidebar layout integration", function()
     assert.matches("help: g?", footer.lines[2])
   end)
 
+  it("marks the buffer's undo position when no diff is placed", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    vim.history.entries[3].save = 1
+    sidebar.open()
+
+    local tree = vim.buffers[vim.windows[float_win(vim)].buf]
+    assert.matches("^◉", tree.lines[1])
+  end)
+
   it("creates manual folds for long runs and collapses them", function()
-    local vim = fakevim.new(
-      fakevim.history({ {}, { "a" }, { "a", "b" }, { "a", "b", "c" }, { "a", "b", "c", "d" } })
-    )
+    local vim = fakevim.new(fakevim.history({
+      {},
+      { "a" },
+      { "a", "b" },
+      { "a", "b", "c" },
+      { "a", "b", "c", "d" },
+      { "a", "b", "c", "d", "e" },
+    }))
     vim:install()
     sidebar.open()
 
@@ -312,9 +327,14 @@ describe("sidebar layout integration", function()
   end)
 
   it("opens a fold when J/K lands inside one", function()
-    local vim = fakevim.new(
-      fakevim.history({ {}, { "a" }, { "a", "b" }, { "a", "b", "c" }, { "a", "b", "c", "d" } })
-    )
+    local vim = fakevim.new(fakevim.history({
+      {},
+      { "a" },
+      { "a", "b" },
+      { "a", "b", "c" },
+      { "a", "b", "c", "d" },
+      { "a", "b", "c", "d", "e" },
+    }))
     vim:install()
     vim.history.entries[3].save = 3
     split.open()
@@ -334,9 +354,14 @@ describe("sidebar layout integration", function()
   end)
 
   it("revealing a seq opens the fold around it", function()
-    local vim = fakevim.new(
-      fakevim.history({ {}, { "a" }, { "a", "b" }, { "a", "b", "c" }, { "a", "b", "c", "d" } })
-    )
+    local vim = fakevim.new(fakevim.history({
+      {},
+      { "a" },
+      { "a", "b" },
+      { "a", "b", "c" },
+      { "a", "b", "c", "d" },
+      { "a", "b", "c", "d", "e" },
+    }))
     vim:install()
     sidebar.open()
 

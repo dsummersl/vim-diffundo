@@ -52,6 +52,12 @@
 ---@field foldmethod string
 ---@field foldlevel integer
 ---@field foldtext string
+---@field foldcolumn string
+---@field signcolumn string
+---@field number boolean
+---@field relativenumber boolean
+---@field spell boolean
+---@field wrap boolean
 ---@field statusline string
 ---@field winbar string
 

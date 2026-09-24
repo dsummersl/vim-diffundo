@@ -140,7 +140,7 @@ function M.time_width(view)
   local longest = 1
   for _, row in ipairs(view) do
     if row.seq ~= 0 then
-      longest = math.max(longest, #label.short(row.time))
+      longest = math.max(longest, #(label.short(row.time) .. " - " .. row.seq))
     end
   end
   return longest + 1
@@ -199,32 +199,13 @@ local function trunk_of(view, seq_index)
   return trunk
 end
 
----@param kids integer[]
----@param trunk table<integer, boolean>
----@param view diffundo.Row[]
----@param target integer
----@return integer
-local function alt_of(kids, trunk, view, target)
-  local alt = 1
-  for _, kid in ipairs(kids) do
-    if kid == target then
-      return alt
-    end
-    if trunk[view[kid].seq] == nil then
-      alt = alt + 1
-    end
-  end
-  return alt
-end
-
 ---@param seq_index table<integer, integer>
 ---@param children integer[][]
----@param trunk table<integer, boolean>
 ---@param view diffundo.Row[]
 ---@param lane integer[]
 ---@param i integer
 ---@return integer|nil
-local function branch_lane(seq_index, children, trunk, view, lane, i)
+local function branch_lane(seq_index, children, view, lane, i)
   local parent = seq_index[view[i].parent]
   if not parent or not lane[parent] then
     return nil
@@ -233,7 +214,7 @@ local function branch_lane(seq_index, children, trunk, view, lane, i)
   if #kids == 1 then
     return lane[parent]
   end
-  return lane[parent] + alt_of(kids, trunk, view, i)
+  return lane[parent] + 1
 end
 
 ---@param view diffundo.Row[]
@@ -247,7 +228,7 @@ local function lane_for(view, seq_index, children, trunk)
     if view[i].parent == 0 or trunk[view[i].seq] then
       lane[i] = 1
     else
-      lane[i] = branch_lane(seq_index, children, trunk, view, lane, i)
+      lane[i] = branch_lane(seq_index, children, view, lane, i)
     end
   end
   return lane
@@ -323,30 +304,6 @@ end
 ---@param view diffundo.Row[]
 ---@param children integer[][]
 ---@param trunk table<integer, boolean>
----@return integer[]
-local function alternates_for(view, children, trunk)
-  local alts = {}
-  for i = 1, #view do
-    local alt = 0
-    local kids = children[i]
-    if kids then
-      for _, kid in ipairs(kids) do
-        if trunk[view[kid].seq] == nil then
-          alt = alt + 1
-        end
-      end
-    end
-    alts[i] = alt
-  end
-  return alts
-end
-
----@param view diffundo.Row[]
----@param children integer[][]
----@param lane integer[]
----@param first integer[]
----@param last integer[]
----@param trunk table<integer, boolean>
 ---@return table<integer, table<integer, boolean>>
 local function open_columns(view, children, lane, first, last, trunk)
   local open = {}
@@ -364,13 +321,29 @@ local function open_columns(view, children, lane, first, last, trunk)
 end
 
 ---@param view diffundo.Row[]
----@return integer[], integer[][], table<integer, table<integer, boolean>>, integer[]
+---@param seq_index table<integer, integer>
+---@return table<integer, boolean>
+local function heads_for(view, seq_index)
+  local heads = {}
+  for i = 1, #view do
+    heads[i] = true
+  end
+  for i, r in ipairs(view) do
+    local parent = seq_index[r.parent]
+    if parent and i < parent then
+      heads[parent] = false
+    end
+  end
+  return heads
+end
+
+---@param view diffundo.Row[]
+---@return integer[], table<integer, table<integer, boolean>>, table<integer, boolean>
 local function topology_for(view)
   local seq_index = seq_index_for(view)
   local children = children_for(view, seq_index)
   local trunk = trunk_of(view, seq_index)
   local lane = fill_lanes(view, lane_for(view, seq_index, children, trunk))
-  local alts = alternates_for(view, children, trunk)
   local open = open_columns(
     view,
     children,
@@ -379,7 +352,7 @@ local function topology_for(view)
     subtree_ends(view, children),
     trunk
   )
-  return lane, children, open, alts
+  return lane, open, heads_for(view, seq_index)
 end
 
 ---@param is_current boolean
@@ -398,35 +371,23 @@ local function node_glyph(is_current, save)
   return "│"
 end
 
----@param k integer
----@param tails integer
----@return string
-local function arm_glyph(k, tails)
-  if k < tails then
-    return "┬"
-  end
-  return "┐"
+---@param i integer
+---@param lane integer[]
+---@param other integer
+---@return boolean
+local function lane_gap(i, lane, other)
+  return (lane[other] or 0) ~= lane[i]
 end
 
----@param kids integer[]
 ---@param i integer
----@param last integer
----@param non_alts integer
----@param is_current boolean
----@param save boolean
----@return string[]
-local function lane_cells(kids, i, last, non_alts, is_current, save)
-  if #kids >= 2 then
-    local cells = { "├" }
-    for k = 1, non_alts do
-      cells[#cells + 1] = arm_glyph(k, non_alts)
-    end
-    return cells
+---@param lane integer[]
+---@return boolean
+local function junction_for(i, lane)
+  local own = lane[i]
+  if own == nil or own < 2 then
+    return false
   end
-  if i == last then
-    return { "└" }
-  end
-  return { node_glyph(is_current, save) }
+  return lane_gap(i, lane, i - 1) or lane_gap(i, lane, i + 1)
 end
 
 ---@param lane integer
@@ -451,18 +412,21 @@ local function pass_columns(lane, open_i)
 end
 
 ---@param i integer
----@param lane integer
----@param children integer[][]
+---@param lane integer[]
 ---@param open_i table<integer, boolean>|nil
----@param last_row integer
----@param non_alts integer
 ---@param is_current boolean
 ---@param save boolean
 ---@return string
-local function gutter_for(i, lane, children, open_i, last_row, non_alts, is_current, save)
-  local cells = pass_columns(lane, open_i)
-  for _, cell in ipairs(lane_cells(children[i] or {}, i, last_row, non_alts, is_current, save)) do
-    cells[#cells + 1] = cell
+local function gutter_for(i, lane, open_i, is_current, save)
+  local cells = pass_columns(lane[i], open_i)
+  if junction_for(i, lane) then
+    for c = 1, lane[i] - 2 do
+      cells[c] = "┊"
+    end
+    cells[lane[i] - 1] = "├"
+    cells[lane[i]] = "┘"
+  else
+    cells[lane[i]] = node_glyph(is_current, save)
   end
   return table.concat(cells, "")
 end
@@ -509,32 +473,29 @@ end
 
 ---@param view diffundo.Row[]
 ---@param i integer
----@param lane integer[]
----@param open table<integer, table<integer, boolean>>
----@param children integer[][]
----@param alts integer[]
+---@param gutters string[]
+---@param tree_w integer
 ---@param time_w integer
 ---@param width integer
----@param current integer|nil
 ---@return string, diffundo.Span[]
-local function row_line(view, i, lane, open, children, alts, time_w, width, current)
+local function row_line(view, i, gutters, tree_w, time_w, width)
   local r = view[i]
-  local gutter =
-    gutter_for(i, lane[i], children, open[i], #view, alts[i], r.seq == current, r.save ~= nil)
+  local gutter = gutters[i]
+  local tree = gutter .. string.rep(" ", tree_w - cell_width(gutter) + 1)
   local preview, marks = preview_parts(r)
-  local time = label.short(r.time)
-  local body_w = width - cell_width(gutter) - time_w
+  local time = label.short(r.time) .. " - " .. r.seq
+  local body_w = width - tree_w - 1 - time_w
   if cell_width(preview) > body_w then
     preview = truncate_cells(preview, math.max(0, body_w))
     marks = {}
   end
-  local line = gutter
+  local line = tree
     .. preview
     .. string.rep(" ", math.max(0, body_w - cell_width(preview)))
     .. string.rep(" ", math.max(0, time_w - cell_width(time)))
     .. time
   local spans = {}
-  local base = #gutter
+  local base = #tree
   for _, mark in ipairs(marks) do
     spans[#spans + 1] = {
       line = 0,
@@ -549,25 +510,26 @@ end
 ---@param view diffundo.Row[]
 ---@param first integer
 ---@param count integer
----@param lane integer[]
----@param open table<integer, table<integer, boolean>>
+---@param gutters string[]
+---@param tree_w integer
 ---@param time_w integer
 ---@param width integer
 ---@return string
-local function caption_for(view, first, count, lane, open, time_w, width)
+local function caption_for(view, first, count, gutters, tree_w, time_w, width)
   local added, removed = 0, 0
   for offset = 0, count - 1 do
     added = added + #view[first + offset].added
     removed = removed + #view[first + offset].removed
   end
   local text = string.format("+%d states: +%d -%d lines %d undos", count, added, removed, count)
-  local gutter = gutter_for(first, lane[first], {}, open[first], #view, 0, false, false)
-  local time = label.short(view[first].time)
-  local body_w = width - cell_width(gutter) - time_w
+  local gutter = gutters[first]
+  local tree = gutter .. string.rep(" ", tree_w - cell_width(gutter) + 1)
+  local time = label.short(view[first].time) .. " - " .. view[first].seq
+  local body_w = width - tree_w - 1 - time_w
   if cell_width(text) > body_w then
     text = truncate_cells(text, math.max(0, body_w))
   end
-  return gutter
+  return tree
     .. text
     .. string.rep(" ", math.max(0, body_w - cell_width(text)))
     .. string.rep(" ", math.max(0, time_w - cell_width(time)))
@@ -676,16 +638,13 @@ end
 
 ---@param view diffundo.Row[]
 ---@param index integer
----@param lane integer[]
----@param open table<integer, table<integer, boolean>>
----@param children integer[][]
----@param alts integer[]
+---@param gutters string[]
+---@param tree_w integer
 ---@param time_w integer
 ---@param width integer
----@param current integer|nil
 ---@param state diffundo.DisplayBuf
-local function emit_row(view, index, lane, open, children, alts, time_w, width, current, state)
-  local text, row_spans = row_line(view, index, lane, open, children, alts, time_w, width, current)
+local function emit_row(view, index, gutters, tree_w, time_w, width, state)
+  local text, row_spans = row_line(view, index, gutters, tree_w, time_w, width)
   state.row_to_line[index] = state.buf
   state.lines[state.buf] = text
   for _, span in ipairs(row_spans) do
@@ -699,42 +658,45 @@ end
 ---@param i integer
 ---@param run_end integer
 ---@param fold_min integer
----@param lane integer[]
----@param open table<integer, table<integer, boolean>>
----@param children integer[][]
----@param alts integer[]
+---@param gutters string[]
+---@param tree_w integer
 ---@param time_w integer
 ---@param width integer
----@param current integer|nil
 ---@param state diffundo.DisplayBuf
 ---@return integer
-local function emit_run(
-  view,
-  i,
-  run_end,
-  fold_min,
-  lane,
-  open,
-  children,
-  alts,
-  time_w,
-  width,
-  current,
-  state
-)
+local function emit_run(view, i, run_end, fold_min, gutters, tree_w, time_w, width, state)
   local run_len = run_end - i + 1
   if run_len > fold_min then
     local start = state.buf
-    state.lines[start] = caption_for(view, i, run_len, lane, open, time_w, width)
+    state.row_to_line[i] = start
+    state.lines[start] = caption_for(view, i, run_len, gutters, tree_w, time_w, width)
     state.buf = start + 1
-    for index = i, run_end do
-      emit_row(view, index, lane, open, children, alts, time_w, width, current, state)
+    for index = i + 1, run_end do
+      emit_row(view, index, gutters, tree_w, time_w, width, state)
     end
     state.folds[#state.folds + 1] = { start = start, stop = start + run_len - 1 }
     return run_end + 1
   end
-  emit_row(view, i, lane, open, children, alts, time_w, width, current, state)
+  emit_row(view, i, gutters, tree_w, time_w, width, state)
   return i + 1
+end
+
+---@param view diffundo.Row[]
+---@param lane integer[]
+---@param open table<integer, table<integer, boolean>>
+---@param current integer|nil
+---@return string[], integer
+local function gutters_for(view, lane, open, current)
+  local gutters = {}
+  local tree_w = 1
+  for i = 1, #view do
+    if view[i].seq ~= 0 then
+      local gutter = gutter_for(i, lane, open[i], view[i].seq == current, view[i].save ~= nil)
+      gutters[i] = gutter
+      tree_w = math.max(tree_w, cell_width(gutter))
+    end
+  end
+  return gutters, tree_w
 end
 
 ---@param buf_lines string[]
@@ -761,7 +723,8 @@ end
 ---@return diffundo.Display
 function M.display(view, opts)
   local width = opts.width
-  local lane, children, open, alts = topology_for(view)
+  local lane, open, heads = topology_for(view)
+  local gutters, tree_w = gutters_for(view, lane, open, opts.current)
   local time_w = M.time_width(view)
   local fold_min = opts.fold_min or 3
   local state = {
@@ -775,22 +738,12 @@ function M.display(view, opts)
   while i <= #view do
     if view[i].seq == 0 then
       i = i + 1
+    elseif heads[i] then
+      emit_row(view, i, gutters, tree_w, time_w, width, state)
+      i = i + 1
     else
       local run_end = run_end_for(view, i)
-      i = emit_run(
-        view,
-        i,
-        run_end,
-        fold_min,
-        lane,
-        open,
-        children,
-        alts,
-        time_w,
-        width,
-        opts.current,
-        state
-      )
+      i = emit_run(view, i, run_end, fold_min, gutters, tree_w, time_w, width, state)
     end
   end
   local footer_start = append_footer(state.lines, footer_lines(view, opts, width), opts.height)

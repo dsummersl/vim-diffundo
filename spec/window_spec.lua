@@ -22,6 +22,18 @@ describe("window.open", function()
     assert.is_nil(vim.windows[win].options.winbar)
   end)
 
+  it("turns off inherited padding columns and wrapping", function()
+    local win = window.open({ lines = { "one" }, width = 40 })
+    local options = vim.windows[win].options
+
+    assert.are.equal("no", options.signcolumn)
+    assert.are.equal("0", options.foldcolumn)
+    assert.is_false(options.number)
+    assert.is_false(options.relativenumber)
+    assert.is_false(options.spell)
+    assert.is_false(options.wrap)
+  end)
+
   it("clamps the column to the editor width", function()
     vim.o.columns = 30
     local win = window.open({ lines = { "one" }, width = 40 })

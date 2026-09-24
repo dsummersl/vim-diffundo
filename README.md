@@ -74,17 +74,20 @@ minimal layout. The float sits in the upper right of the editor by default;
 `g:diffundo_fold_min` (default 3) the fold threshold: runs of consecutive
 same-branch states longer than this collapse into a caption row.
 
-Each row is `<gutter><preview …><time>`: ancestor lanes draw `┊`; the row's own
-lane is `│`, `○`/`◉` when it is the diff's current state (`◉` also saved),
-`●` when saved, `├┐`/`├┬┐` where a fork splits onto alternate branches, and
-`└` closing the tree's last lane. The preview shows a single changed line
-(`+ <line>`, `- <line>`) or counts like `+2 -1 lines`; the time column is
-right-aligned compact relative age (`now`, `2m`, `1h`, `3d`, `2w`, `4mo`,
-`2y`).
+Each row is `<tree> <preview …><time - seq>`: the tree gutter is padded to the
+view's widest lane plus one space, so the preview and time columns align down
+the panel. Ancestor lanes draw `┊`; the
+row's own lane is `│`, `○`/`◉` when it is the diff's current state (`◉` also
+saved), or `●` when saved. Where a branch leaves the trunk, both ends of its
+lane get a `├┘` junction cap (deeper lanes nest, e.g. `┊┊├┘`). The preview
+shows a single changed line (`+ <line>`, `- <line>`) or counts like
+`+2 -1 lines`; the right column is the compact relative age with the state's
+sequence number (`2m - 3`, `3d - 20`, `2w - 4`).
 
-Runs of consecutive states on one branch collapse to a caption row
-(`+8 states: +5 -3 lines 8 undos`) — `zo`/`zc` open/fold one run, `zr`/`zm`
-all. A footer shows the selected state's sequence number,
+Runs of consecutive undo-chain states collapse to a caption row (`+8 states:
++5 -3 lines 8 undos`); a run never starts on a branch's head row, so the
+junction cap above the fold stays visible. `zo`/`zc` open/fold one run,
+`zr`/`zm` all. A footer shows the selected state's sequence number,
 saved/current state, absolute time and change totals, then `shown/total` and
 a right-aligned `help: g?` hint; `g?` in the sidebar notifies this key list.
 The float's rows come from `require("diffundo.history").rows`, the same list

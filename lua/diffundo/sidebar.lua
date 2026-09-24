@@ -75,8 +75,13 @@ local function pick_source()
 end
 
 ---@return integer|nil
+local function current_seq()
+  return vim.t.diffundo_diff_undonr or vim.fn.undotree().seq_cur
+end
+
+---@return integer|nil
 local function current_index()
-  return index_of_seq(vim.t.diffundo_diff_undonr)
+  return index_of_seq(current_seq())
 end
 
 ---@param line integer
@@ -125,7 +130,7 @@ local function render_float()
     return
   end
   local display = history.display(vim.t.diffundo_history_view, {
-    current = vim.t.diffundo_diff_undonr,
+    current = current_seq(),
     width = width(),
     selected = current_index(),
     total = #rows(),
@@ -254,7 +259,7 @@ function M.open()
     vim.notify("J/K saved jumps · <cr> place · / filter · g? help · q close")
   end)
   render_float()
-  select_row(vim.t.diffundo_diff_undonr)
+  select_row(current_seq())
   return true
 end
 
