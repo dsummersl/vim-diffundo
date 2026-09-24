@@ -161,7 +161,8 @@ local function render_float()
       vim.cmd(fold.start .. "," .. fold.stop .. "fold")
     end
     vim.wo.foldlevel = 0
-    vim.wo.foldtext = "getline(v:foldstart)"
+    vim.wo.foldtext =
+      "get(t:, 'diffundo_history_display', {}).captions[v:foldstart] ?? getline(v:foldstart)"
   end)
 end
 

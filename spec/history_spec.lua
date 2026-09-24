@@ -336,8 +336,12 @@ describe("history.display", function()
     assert.matches("^├┘", display.lines[4])
   end)
 
-  it("folds a long same-branch run into a caption and a vim fold", function()
+  it("folds a long branch stretch and keeps the caption out of the buffer", function()
     local rows = {
+      row({ seq = 9, parent = 2 }),
+      row({ seq = 8, parent = 7 }),
+      row({ seq = 7, parent = 6 }),
+      row({ seq = 6, parent = 5 }),
       row({ seq = 5, parent = 4 }),
       row({ seq = 4, parent = 3 }),
       row({ seq = 3, parent = 2 }),
@@ -347,9 +351,12 @@ describe("history.display", function()
     local display = history.display(rows, { width = 40, fold_min = 3 })
 
     assert.matches("^│", display.lines[1])
-    assert.matches("%+4 states: %+0 %-0 lines 4 undos", display.lines[2])
-    assert.are.same({ { start = 2, stop = 5 } }, display.folds)
-    assert.are.same({ 1, 2, 3, 4, 5 }, display.row_to_line)
+    assert.matches("^├┘", display.lines[2])
+    assert.matches("^┊│ %+0 lines", display.lines[3])
+    assert.matches("^├┘", display.lines[7])
+    assert.are.same({ { start = 3, stop = 6 } }, display.folds)
+    assert.are.same({ [3] = "+4 states: +0 -0 lines 4 undos" }, display.captions)
+    assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9 }, display.row_to_line)
   end)
 
   it("appends the footer below the rows", function()
@@ -397,8 +404,12 @@ describe("history.display", function()
     assert.are.equal(4, #display.lines)
   end)
 
-  it("folds a same-branch chain without counting the older sentinel", function()
+  it("folds a branch stretch without counting the older sentinel", function()
     local rows = {
+      row({ seq = 9, parent = 2 }),
+      row({ seq = 8, parent = 7 }),
+      row({ seq = 7, parent = 6 }),
+      row({ seq = 6, parent = 5 }),
       row({ seq = 5, parent = 4 }),
       row({ seq = 4, parent = 3 }),
       row({ seq = 3, parent = 2 }),
@@ -406,13 +417,11 @@ describe("history.display", function()
       row({ seq = 1, parent = 0 }),
       { seq = 0, time = 0, save = nil, added = {}, removed = {}, parent = 0, label = "" },
     }
-    local display = history.display(rows, { width = 40, fold_min = 3, total = 6 })
+    local display = history.display(rows, { width = 40, fold_min = 3, total = 10 })
 
-    assert.matches("^│", display.lines[1])
-    assert.matches("%+4 states: %+0 %-0 lines 4 undos", display.lines[2])
-    assert.are.same({ { start = 2, stop = 5 } }, display.folds)
-    assert.are.same({ 1, 2, 3, 4, 5 }, display.row_to_line)
-    assert.matches("5/6", display.lines[#display.lines])
+    assert.are.same({ { start = 3, stop = 6 } }, display.folds)
+    assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9 }, display.row_to_line)
+    assert.matches("9/10", display.lines[#display.lines])
   end)
 
   it("shows the current saved state and change totals in the footer", function()
@@ -583,7 +592,7 @@ describe("history.display with the us.txt tree", function()
       rendered("│", "+0 lines", "2d - 18"),
       rendered("│", "+1 -1 lines", "2d - 17"),
       rendered("├┘", "+1 -1 lines", "3d - 16"),
-      rendered("┊│", "+15 states: +21 -20 lines 15 undos", "3d - 15"),
+      rendered("┊│", "+1 -1 lines", "3d - 15"),
       rendered("┊│", "- one", "3d - 14"),
       rendered("┊│", "- two", "3d - 13"),
       rendered("┊│", "- three", "3d - 12"),
@@ -607,12 +616,13 @@ describe("history.display with the us.txt tree", function()
     assert.are.equal(22, #display.lines)
   end)
 
-  it("folds the branch run under one caption above rows 14 through 1", function()
+  it("folds rows 15 through 6 with the caption served as foldtext", function()
     build_fake():install()
     local rows = history.rows({})
     local display = history.display(rows, { width = width, current = 20 })
 
-    assert.are.same({ { start = 6, stop = 20 } }, display.folds)
+    assert.are.same({ { start = 6, stop = 15 } }, display.folds)
+    assert.are.same({ [6] = "+10 states: +1 -10 lines 10 undos" }, display.captions)
     assert.are.same(
       { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 },
       display.row_to_line
@@ -816,7 +826,7 @@ describe("history.display with sibling branches", function()
       rendered("│", "+1 -1 lines", "2d - 17"),
       rendered("├┘", "+1 -1 lines", "3d - 16"),
       rendered("┊│", "- 2 15 things that are", "3d - 15"),
-      rendered("┊│", "+14 states: +21 -19 lines 14…", "3d - 14"),
+      rendered("┊│", "- B", "3d - 14"),
       rendered("┊│", "- 2 15 things that are", "3d - 13"),
       rendered("┊│", "- G", "3d - 12"),
       rendered("┊│", "- 7", "3d - 11"),
@@ -839,12 +849,13 @@ describe("history.display with sibling branches", function()
     assert.are.equal(22, #display.lines)
   end)
 
-  it("folds rows 14 through 1 and keeps 15 and 16 outside", function()
+  it("folds rows 14 through 6 and keeps the caps outside", function()
     build_fake():install()
     local rows = history.rows({})
     local display = history.display(rows, { width = width, current = 18 })
 
-    assert.are.same({ { start = 7, stop = 20 } }, display.folds)
+    assert.are.same({ { start = 7, stop = 15 } }, display.folds)
+    assert.are.same({ [7] = "+9 states: +0 -9 lines 9 undos" }, display.captions)
     assert.are.same(
       { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 },
       display.row_to_line

@@ -293,15 +293,21 @@ describe("sidebar layout integration", function()
     assert.matches("^◉", tree.lines[1])
   end)
 
-  it("creates manual folds for long runs and collapses them", function()
-    local vim = fakevim.new(fakevim.history({
-      {},
-      { "a" },
-      { "a", "b" },
-      { "a", "b", "c" },
-      { "a", "b", "c", "d" },
-      { "a", "b", "c", "d", "e" },
-    }))
+  ---@return table
+  local function branched()
+    local h = fakevim.history({ {}, { "a" }, { "a", "b" }, { "a", "b", "c" } })
+    h:branch(2, { "x" })
+    h:branch(4, { "x", "y" })
+    h:branch(5, { "x", "y", "z" })
+    h:branch(6, { "x", "y", "z", "w" })
+    h:branch(7, { "x", "y", "z", "w", "v" })
+    h:branch(8, { "x", "y", "z", "w", "v", "u" })
+    h:branch(2, { "a", "b", "c", "d" })
+    return h
+  end
+
+  it("creates manual folds for long branch stretches and collapses them", function()
+    local vim = fakevim.new(branched())
     vim:install()
     sidebar.open()
 
@@ -327,23 +333,16 @@ describe("sidebar layout integration", function()
   end)
 
   it("opens a fold when J/K lands inside one", function()
-    local vim = fakevim.new(fakevim.history({
-      {},
-      { "a" },
-      { "a", "b" },
-      { "a", "b", "c" },
-      { "a", "b", "c", "d" },
-      { "a", "b", "c", "d", "e" },
-    }))
+    local vim = fakevim.new(branched())
     vim:install()
-    vim.history.entries[3].save = 3
+    vim.history.entries[6].save = 1
     split.open()
     sidebar.open()
 
     assert.are.equal(1, #vim.folds)
     sidebar.move_save(1)
 
-    assert.are.same({ 3, 0 }, vim.windows[float_win(vim)].cursor)
+    assert.are.same({ 5, 0 }, vim.windows[float_win(vim)].cursor)
     local opened = false
     for _, command in ipairs(vim.commands) do
       if command:match("normal! zv") then
@@ -354,21 +353,14 @@ describe("sidebar layout integration", function()
   end)
 
   it("revealing a seq opens the fold around it", function()
-    local vim = fakevim.new(fakevim.history({
-      {},
-      { "a" },
-      { "a", "b" },
-      { "a", "b", "c" },
-      { "a", "b", "c", "d" },
-      { "a", "b", "c", "d", "e" },
-    }))
+    local vim = fakevim.new(branched())
     vim:install()
     sidebar.open()
 
     assert.are.equal(1, #vim.folds)
-    sidebar.reveal(3)
+    sidebar.reveal(6)
 
-    assert.are.same({ 3, 0 }, vim.windows[float_win(vim)].cursor)
+    assert.are.same({ 5, 0 }, vim.windows[float_win(vim)].cursor)
     local opened = false
     for _, command in ipairs(vim.commands) do
       if command:match("normal! zv") then

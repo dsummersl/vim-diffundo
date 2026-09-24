@@ -29,6 +29,7 @@ local M = {}
 ---@field spans diffundo.Span[]
 ---@field folds diffundo.Fold[]
 ---@field row_to_line integer[]
+---@field captions table<integer, string>
 ---@field footer_start integer
 
 ---@class diffundo.DisplayBuf
@@ -36,6 +37,7 @@ local M = {}
 ---@field spans diffundo.Span[]
 ---@field folds diffundo.Fold[]
 ---@field row_to_line integer[]
+---@field captions table<integer, string>
 ---@field buf integer
 
 local older = {
@@ -510,30 +512,14 @@ end
 ---@param view diffundo.Row[]
 ---@param first integer
 ---@param count integer
----@param gutters string[]
----@param tree_w integer
----@param time_w integer
----@param width integer
 ---@return string
-local function caption_for(view, first, count, gutters, tree_w, time_w, width)
+local function caption_text(view, first, count)
   local added, removed = 0, 0
   for offset = 0, count - 1 do
     added = added + #view[first + offset].added
     removed = removed + #view[first + offset].removed
   end
-  local text = string.format("+%d states: +%d -%d lines %d undos", count, added, removed, count)
-  local gutter = gutters[first]
-  local tree = gutter .. string.rep(" ", tree_w - cell_width(gutter) + 1)
-  local time = label.short(view[first].time) .. " - " .. view[first].seq
-  local body_w = width - tree_w - 1 - time_w
-  if cell_width(text) > body_w then
-    text = truncate_cells(text, math.max(0, body_w))
-  end
-  return tree
-    .. text
-    .. string.rep(" ", math.max(0, body_w - cell_width(text)))
-    .. string.rep(" ", math.max(0, time_w - cell_width(time)))
-    .. time
+  return string.format("+%d states: +%d -%d lines %d undos", count, added, removed, count)
 end
 
 ---@param index integer
@@ -623,17 +609,27 @@ end
 
 ---@param view diffundo.Row[]
 ---@param i integer
+---@param lane integer[]
 ---@return integer
-local function run_end_for(view, i)
+local function run_end_for(view, i, lane)
   local run_end = i
   while
     run_end < #view
     and view[run_end].parent == view[run_end + 1].seq
-    and view[run_end + 1].seq ~= 0
+    and lane[run_end + 1] == lane[i]
+    and not junction_for(run_end + 1, lane)
   do
     run_end = run_end + 1
   end
   return run_end
+end
+
+---@param i integer
+---@param lane integer[]
+---@param heads table<integer, boolean>
+---@return boolean
+local function standalone(i, lane, heads)
+  return heads[i] or lane[i] == 1 or junction_for(i, lane)
 end
 
 ---@param view diffundo.Row[]
@@ -668,13 +664,11 @@ local function emit_run(view, i, run_end, fold_min, gutters, tree_w, time_w, wid
   local run_len = run_end - i + 1
   if run_len > fold_min then
     local start = state.buf
-    state.row_to_line[i] = start
-    state.lines[start] = caption_for(view, i, run_len, gutters, tree_w, time_w, width)
-    state.buf = start + 1
-    for index = i + 1, run_end do
+    for index = i, run_end do
       emit_row(view, index, gutters, tree_w, time_w, width, state)
     end
     state.folds[#state.folds + 1] = { start = start, stop = start + run_len - 1 }
+    state.captions[start] = caption_text(view, i, run_len)
     return run_end + 1
   end
   emit_row(view, i, gutters, tree_w, time_w, width, state)
@@ -732,17 +726,18 @@ function M.display(view, opts)
     spans = {},
     folds = {},
     row_to_line = {},
+    captions = {},
     buf = 1,
   }
   local i = 1
   while i <= #view do
     if view[i].seq == 0 then
       i = i + 1
-    elseif heads[i] then
+    elseif standalone(i, lane, heads) then
       emit_row(view, i, gutters, tree_w, time_w, width, state)
       i = i + 1
     else
-      local run_end = run_end_for(view, i)
+      local run_end = run_end_for(view, i, lane)
       i = emit_run(view, i, run_end, fold_min, gutters, tree_w, time_w, width, state)
     end
   end
@@ -752,6 +747,7 @@ function M.display(view, opts)
     spans = state.spans,
     folds = state.folds,
     row_to_line = state.row_to_line,
+    captions = state.captions,
     footer_start = footer_start,
   }
 end
