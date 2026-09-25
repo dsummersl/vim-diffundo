@@ -215,11 +215,12 @@ async function assertDiffSplit(
   assertEquals(sourceBuffer.lines, expected.sourceLines);
   assertEquals([undoBuffer.diff, sourceBuffer.diff], [1, 1]);
 
-  // WHY: the label must stay visible under 'laststatus' 3, where only the
-  // focused window's statusline is drawn.
+  // WHY: the label stays visible via the statusline; the winbar is only set
+  // when the editor already uses one, so the diff lines never shift a row
+  // below the source window's.
   assert(undoBuffer.name.endsWith(`- ${expected.undonr}`), undoBuffer.name);
   assertEquals(undoBuffer.statusline, undoBuffer.name);
-  assertEquals(undoBuffer.winbar, undoBuffer.name);
+  assertEquals(undoBuffer.winbar, "");
   // WHY: the source window must keep the editor's global values untouched.
   assertEquals(
     [sourceBuffer.statusline, sourceBuffer.winbar],
@@ -314,6 +315,34 @@ test({
       sourceLines: ["one", "two", "three"],
       undonr: 2,
     });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "the diff split keeps source and diff lines on the same screen row",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["one"], ["one", "two"], [
+      "one",
+      "two",
+      "three",
+    ]]);
+
+    // WHY: without -no-history the two floats add their own windows, so the
+    // alignment check needs the minimal two-window layout.
+    await denops.cmd("set winbar=");
+    await denops.cmd("Diffundo -no-history earlier");
+
+    // WHY: a winbar on the diff window alone would push its buffer down a
+    // row; the source and diff line 1 must land on the same screen row.
+    await denops.cmd("redraw");
+    const rows = await denops.eval(
+      "map(range(1, winnr('$')), {_, w -> screenpos(win_getid(w), 1, 1).row})",
+    ) as number[];
+    assertEquals(rows.length, 2);
+    assertEquals(rows[0], rows[1]);
   },
 });
 

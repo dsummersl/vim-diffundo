@@ -409,7 +409,13 @@ function M.new(history, opts)
   self.g = {}
   self.keymaps = {}
   self.t = {}
-  self.o = { ignorecase = false, smartcase = false, lines = 40, columns = 80 }
+  self.o = {
+    ignorecase = false,
+    smartcase = false,
+    lines = 40,
+    columns = 80,
+    winbar = "",
+  }
   self.highlights = {}
   self.folds = {}
   self.log = { levels = { ERROR = 4, INFO = 2 } }

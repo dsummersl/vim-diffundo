@@ -82,7 +82,9 @@ end
 function M.apply(label)
   vim.api.nvim_buf_set_name(0, label)
   vim.wo.statusline = label
-  vim.wo.winbar = label
+  if vim.o.winbar ~= "" then
+    vim.wo.winbar = label
+  end
 end
 
 return M

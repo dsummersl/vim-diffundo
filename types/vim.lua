@@ -69,6 +69,7 @@
 ---@field smartcase boolean
 ---@field lines integer
 ---@field columns integer
+---@field winbar string
 
 ---@class vim.keymap
 ---@field set fun(mode: string, lhs: string, rhs: string|fun(), opts: table)

@@ -45,8 +45,9 @@ CONTENTS                                                     *diffundo-contents*
     g:diffundo_history = false keeps the minimal layout, and
     g:diffundo_history_width (default 40) sets the width.
 
-The diff window's 'statusline' and 'winbar' show the timestamp and
-sequence number (|changenr()|) of the state it displays.
+The diff window's 'statusline' shows the timestamp and sequence number
+(|changenr()|) of the state it displays; when the editor uses a 'winbar' it
+is shown there too, so the diff lines never shift a row off the source.
 
 ==============================================================================
 2. LUA API                                                        *diffundo-api*

@@ -39,8 +39,9 @@ Search walks the undo *tree*: each state is compared with the state it was
 edited from, so switching undo branches never shows up as a change.
 
 The diff window is labelled with the timestamp and sequence number of the undo
-state it shows. The label is set as that window's `'statusline'` and
-`'winbar'`, so it stays visible even with `laststatus=3`.
+state it shows. The label is set as that window's `'statusline'`; when the
+editor already uses a `'winbar'` it is set there too, so the diff lines stay
+on the same screen rows as the source window's.
 
 Lua API
 -------

@@ -110,7 +110,7 @@ describe("diffundo", function()
       local name = vim:diff_buffer().name
       assert.matches("%- 2$", name)
       assert.are.equal(name, vim:diff_window().options.statusline)
-      assert.are.equal(name, vim:diff_window().options.winbar)
+      assert.is_nil(vim:diff_window().options.winbar)
     end)
   end)
 
