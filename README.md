@@ -26,12 +26,22 @@ One command, `:Diffundo`, with subcommands (tab-completes):
 
 *:Diffundo search! {pattern}* : the same for a line that was **removed**.
 
+*:Diffundo history* : toggle the floating history sidebar — the undo tree as
+a gutter of branch lanes, a one-line preview of what each edit changed, and
+the age right-aligned. Runs of consecutive states fold into a caption row.
+
+In the sidebar: *j*/*k* move by change (or use counts, *gg*/*G*), *J*/*K* move
+between written states, *<cr>* shows the selected state in the diff split,
+*/* filters the list (vim regex, empty to clear), *g?* notifies this key map,
+*q*/*<esc>* closes it.
+
 Search walks the undo *tree*: each state is compared with the state it was
 edited from, so switching undo branches never shows up as a change.
 
 The diff window is labelled with the timestamp and sequence number of the undo
-state it shows. The label is set as that window's `'statusline'` and
-`'winbar'`, so it stays visible even with `laststatus=3`.
+state it shows. The label is set as that window's `'statusline'`; when the
+editor already uses a `'winbar'` it is set there too, so the diff lines stay
+on the same screen rows as the source window's.
 
 Lua API
 -------
@@ -54,6 +64,36 @@ local gone = diffundo.search("TODO", { removed = true })
 `require("diffundo.walker").steps(from_seq)` is the iterator underneath: it
 yields `{ seq, parent, time, save, lines, parent_lines, added, removed }` per
 undo state, newest first, and must be called with the source buffer current.
+
+History sidebar
+---------------
+
+`:Diffundo earlier/later/search` open the history float by default;
+`:Diffundo -no-history earlier` (or `g:diffundo_history` = `false`) keeps the
+minimal layout. The float sits in the upper right of the editor by default;
+`g:diffundo_history_width` (default 40) sets its width and
+`g:diffundo_fold_min` (default 3) the fold threshold: branch stretches longer
+than this collapse under a fold.
+
+Each row is `<tree> <preview …><time - seq>`: the tree gutter is padded to the
+view's widest lane plus one space, so the preview and time columns align down
+the panel. Ancestor lanes draw `┊`; the
+row's own lane is `│`, `○`/`◉` when it is the diff's current state (`◉` also
+saved), or `●` when saved. Where a branch leaves the trunk, both ends of its
+lane get a `├┘` junction cap (deeper lanes nest, e.g. `┊┊├┘`). The preview
+shows a single changed line (`+ <line>`, `- <line>`) or counts like
+`+2 -1 lines`; the right column is the compact relative age with the state's
+sequence number (`2m - 3`, `3d - 20`, `2w - 4`).
+
+Long stretches on one branch collapse under a single fold whose foldtext
+summarizes the hidden states (`+8 states: +5 -3 lines 8 undos`); the fold
+never covers the branch's junction caps, and the buffer keeps every state's
+own change description — `zo`/`zc` open/fold one fold, `zr`/`zm` all. A footer
+shows the selected state's sequence number,
+saved/current state, absolute time and change totals, then `shown/total` and
+a right-aligned `help: g?` hint; `g?` in the sidebar notifies this key list.
+The float's rows come from `require("diffundo.history").rows`, the same list
+the future telescope/quickfix front-ends reuse.
 
 Setup
 -----
@@ -98,7 +138,10 @@ headless neovim through [denops.vim](https://github.com/vim-denops/denops.vim):
 
     make e2e
 
-It needs `deno` and `nvim`.
+It needs `deno` and `nvim`. `make gen` prints the undotree and rendered history
+text that real neovim produces for each sample undo shape in
+`tests/e2e/gen_samples.ts`; that output is the ground truth the golden busted
+tests in `spec/tree_spec.lua` and `spec/history_spec.lua` are derived from.
 
 Architecture Decision Records live in `docs/adr`; see `AGENTS.md` for the
 day-to-day commands.

@@ -10,6 +10,24 @@ This is a neovim plugin: `plugin/diffundo.lua` defines the commands and calls
 into the Lua package in `lua/diffundo/`. See docs/adr/0003-lua-port.md before
 moving anything.
 
+## Project Information
+
+- `make gen` runs `tests/e2e/gen_samples.ts`, which builds each sample undo
+  shape in a real headless nvim via RPC and prints `undotree()`, the computed
+  rows, and the exact rendered tree/footer/folds. That output is the ground
+  truth the golden busted tests and the e2e `assertRenderedTree` goldens are
+  derived from.
+- A real nvim `:enew` buffer holds one empty line `[""]`, so the oldest state
+  diffs `+1 -1 lines`; the fake models this with `{ "" }` as the original state.
+- Linear undo chains never fold; only off-trunk branch stretches longer than
+  `fold_min` (default 3) fold into `+N states` captions.
+- The sidebar snapshots the source's undo position in `t:diffundo_history_seq_cur`
+  at open; the tree float's scratch buffer otherwise reports `seq_cur=1`.
+- `:Diffundo history` opens two editor-relative floats (tree float + a 2-row
+  pinned footer); the tree float is focused and holds only row/caption lines.
+- e2e `stripTime()` normalizes the volatile relative time column
+  ("now - 3" -> "TIME-3") so line assertions are stable across machines.
+
 ## Development Commands
 
 **IMPORTANT**: Always use the Makefile commands for development tasks.

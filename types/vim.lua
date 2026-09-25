@@ -8,22 +8,35 @@
 ---@class vim.fn
 ---@field changenr fun(): integer
 ---@field undotree fun(): vim.undotree
+---@field input fun(prompt: any): string
 ---@field [string] fun(...): any
 
 ---@class vim.api
 ---@field nvim_tabpage_list_wins fun(tabpage: integer): integer[]
 ---@field nvim_win_get_buf fun(window: integer): integer
+---@field nvim_win_call fun(window: integer, fn: fun())
 ---@field nvim_set_current_win fun(window: integer)
 ---@field nvim_get_current_win fun(): integer
 ---@field nvim_win_is_valid fun(window: integer): boolean
----@field nvim_win_get_cursor fun(window: integer): integer[]
+---@field nvim_win_get_cursor fun(window: integer): [integer, integer]
 ---@field nvim_win_set_cursor fun(window: integer, pos: integer[])
 ---@field nvim_get_current_buf fun(): integer
 ---@field nvim_buf_is_valid fun(buffer: integer): boolean
 ---@field nvim_buf_get_lines fun(buffer: integer, start: integer, stop: integer, strict: boolean): string[]
 ---@field nvim_buf_set_lines fun(buffer: integer, start: integer, stop: integer, strict: boolean, lines: string[])
 ---@field nvim_buf_set_name fun(buffer: integer, name: string)
+---@field nvim_create_buf fun(scratch: boolean, listed: boolean): integer
+---@field nvim_open_win fun(buffer: integer, enter: boolean, config: table): integer
+---@field nvim_win_close fun(window: integer, force: boolean)
+---@field nvim_win_set_config fun(window: integer, config: table)
+---@field nvim_win_get_config fun(window: integer): table
+---@field nvim_buf_set_keymap fun(buffer: integer, mode: string, lhs: string, rhs: string, opts: table)
+---@field nvim_buf_delete fun(buffer: integer, opts: table)
 ---@field nvim_create_user_command fun(name: string, command: fun(opts: { args: string }), opts: table)
+---@field nvim_create_namespace fun(name: string): integer
+---@field nvim_buf_add_highlight fun(buffer: integer, ns_id: integer, hl_group: string, line: integer, col_start: integer, col_end: integer)
+---@field nvim_buf_clear_namespace fun(buffer: integer, ns_id: integer, line_start: integer, line_end: integer)
+---@field nvim_buf_call fun(buffer: integer, fn: fun())
 
 ---@class vim.bo
 ---@field filetype string
@@ -37,6 +50,14 @@
 ---@field scrollbind boolean
 ---@field cursorbind boolean
 ---@field foldmethod string
+---@field foldlevel integer
+---@field foldtext string
+---@field foldcolumn string
+---@field signcolumn string
+---@field number boolean
+---@field relativenumber boolean
+---@field spell boolean
+---@field wrap boolean
 ---@field statusline string
 ---@field winbar string
 
@@ -46,6 +67,9 @@
 ---@class vim.o
 ---@field ignorecase boolean
 ---@field smartcase boolean
+---@field lines integer
+---@field columns integer
+---@field winbar string
 
 ---@class vim.keymap
 ---@field set fun(mode: string, lhs: string, rhs: string|fun(), opts: table)

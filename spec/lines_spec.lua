@@ -45,3 +45,25 @@ describe("lines.index_of", function()
     assert.is_nil(lines.index_of({ "abc" }, "b"))
   end)
 end)
+
+local function sub_regex(needle)
+  return {
+    match_str = function(_, line)
+      local start = line:find(needle, 1, true)
+      if start then
+        return start - 1, start
+      end
+      return nil
+    end,
+  }
+end
+
+describe("lines.first_match", function()
+  it("returns the first matching candidate and its column", function()
+    assert.are.same({ "ax", 1 }, { lines.first_match(sub_regex("x"), { "no", "ax", "x" }) })
+  end)
+
+  it("returns nil when nothing matches", function()
+    assert.is_nil(lines.first_match(sub_regex("z"), { "a", "b" }))
+  end)
+end)

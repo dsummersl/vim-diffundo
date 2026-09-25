@@ -48,9 +48,11 @@ function teardown(block) end
 
 ---@class luassert : luassert.modifier
 ---@field is_nil fun(value: any, message?: string)
+---@field is_not_nil fun(value: any, message?: string)
 ---@field is_true fun(value: any, message?: string)
 ---@field is_false fun(value: any, message?: string)
 ---@field matches fun(pattern: string, actual: string, message?: string)
+---@field not_matches fun(pattern: string, actual: string, message?: string)
 ---@field has_error fun(fn: function, message?: string)
 ---@overload fun(value: any, message?: string): any
 assert = {}

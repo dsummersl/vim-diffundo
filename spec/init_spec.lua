@@ -110,7 +110,7 @@ describe("diffundo", function()
       local name = vim:diff_buffer().name
       assert.matches("%- 2$", name)
       assert.are.equal(name, vim:diff_window().options.statusline)
-      assert.are.equal(name, vim:diff_window().options.winbar)
+      assert.is_nil(vim:diff_window().options.winbar)
     end)
   end)
 
@@ -327,7 +327,7 @@ describe("diffundo", function()
       diffundo.command("nonesuch 1")
 
       assert.are.equal(
-        'diffundo: unknown subcommand "nonesuch" (earlier, later, search, search!)',
+        'diffundo: unknown subcommand "nonesuch" (earlier, later, search, search!, history)',
         vim:last_notification()
       )
     end)
@@ -369,6 +369,7 @@ describe("diffundo", function()
       vim:install()
 
       diffundo.command("search needle")
+      diffundo.command("history")
 
       local source_win = vim:window_of_buffer(vim.source_bn)
       assert.are.equal(source_win, vim.current_win)
@@ -443,5 +444,61 @@ describe("diffundo", function()
 
       assert.are.equal(2, registered)
     end)
+  end)
+end)
+
+describe("the history float from commands", function()
+  local vim
+
+  before_each(function()
+    vim = fakevim.new(
+      fakevim.history({ {}, { "first" }, { "first", "second" }, { "first", "second", "third" } })
+    )
+    vim:install()
+  end)
+
+  it("opens by default after earlier and lands on the shown state", function()
+    diffundo.command("earlier")
+
+    assert.are.equal(2, vim.t.diffundo_diff_undonr)
+    assert.are.equal(vim.t.diffundo_history_win, vim.current_win)
+    assert.are.same({ 2, 0 }, vim.windows[vim.t.diffundo_history_win].cursor)
+  end)
+
+  it("the -no-history flag leaves the float closed", function()
+    diffundo.command("-no-history earlier")
+
+    assert.are.equal(2, vim.t.diffundo_diff_undonr)
+    assert.is_nil(vim.t.diffundo_history_win)
+  end)
+
+  it("the -no-history flag leaves the float closed for a search hit", function()
+    diffundo.command("-no-history search first")
+
+    assert.are.equal(1, vim.t.diffundo_diff_undonr)
+    assert.is_nil(vim.t.diffundo_history_win)
+  end)
+
+  it("the g:diffundo_history option leaves the float closed for a search hit", function()
+    vim.g.diffundo_history = false
+
+    diffundo.command("search first")
+
+    assert.are.equal(1, vim.t.diffundo_diff_undonr)
+    assert.is_nil(vim.t.diffundo_history_win)
+  end)
+
+  it("reveals a search hit at its row", function()
+    diffundo.command("search first")
+
+    assert.are.same({ 3, 0 }, vim.windows[vim.t.diffundo_history_win].cursor)
+  end)
+
+  it("history toggles and does not disturb the diff", function()
+    diffundo.command("earlier")
+    diffundo.command("-no-history later")
+
+    assert.are.equal(3, vim.t.diffundo_diff_undonr)
+    assert.are.equal(vim.t.diffundo_history_win, vim.current_win)
   end)
 end)

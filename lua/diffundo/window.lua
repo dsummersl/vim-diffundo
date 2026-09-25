@@ -1,0 +1,68 @@
+local M = {}
+
+---@param win integer
+local function scrub_options(win)
+  vim.api.nvim_win_call(win, function()
+    vim.wo.signcolumn = "no"
+    vim.wo.foldcolumn = "0"
+    vim.wo.number = false
+    vim.wo.relativenumber = false
+    vim.wo.spell = false
+    vim.wo.wrap = false
+  end)
+end
+
+---@param opts { lines: string[], width: integer, height?: integer, row?: integer, enter?: boolean }
+---@return integer
+function M.open(opts)
+  local buf = vim.api.nvim_create_buf(false, true)
+  local win = vim.api.nvim_open_win(buf, opts.enter ~= false, {
+    relative = "editor",
+    row = opts.row or 0,
+    col = math.max(0, vim.o.columns - opts.width),
+    width = opts.width,
+    height = math.max(2, math.min(opts.height or #opts.lines, vim.o.lines - 4)),
+  })
+  scrub_options(win)
+  vim.bo.buftype = "nofile"
+  vim.bo.bufhidden = "wipe"
+  vim.bo.swapfile = false
+  M.render(win, opts.lines)
+  return win
+end
+
+---@param win integer
+---@param lines string[]
+---@param opts { height?: integer }|nil
+function M.render(win, lines, opts)
+  vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, lines)
+  local height = opts and opts.height or math.max(2, math.min(#lines, vim.o.lines - 4))
+  vim.api.nvim_win_set_config(win, { height = height })
+end
+
+---@param win integer
+---@param lhs string
+---@param fn fun()
+function M.map(win, lhs, fn)
+  vim.api.nvim_buf_set_keymap(vim.api.nvim_win_get_buf(win), "n", lhs, "", {
+    callback = fn,
+    silent = true,
+  })
+end
+
+---@param win integer
+function M.close(win)
+  local buf = vim.api.nvim_win_get_buf(win)
+  vim.api.nvim_win_close(win, true)
+  if vim.api.nvim_buf_is_valid(buf) then
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end
+end
+
+---@param win integer|nil
+---@return boolean
+function M.is_open(win)
+  return win ~= nil and vim.api.nvim_win_is_valid(win)
+end
+
+return M

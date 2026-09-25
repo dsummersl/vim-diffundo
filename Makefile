@@ -1,4 +1,4 @@
-.PHONY: setup test lint type fix complexity ci e2e
+.PHONY: setup test lint type fix complexity ci e2e gen
 
 ROCKSPEC := vim-diffundo-dev-1.rockspec
 LUAROCKS := luarocks --tree lua_modules
@@ -44,5 +44,8 @@ $(REPEAT_PATH):
 
 e2e: $(DENOPS_PATH) $(REPEAT_PATH)
 	cd tests/e2e && DENOPS_TEST_DENOPS_PATH=$(DENOPS_PATH) deno test -A
+
+gen: $(DENOPS_PATH)
+	cd tests/e2e && DENOPS_TEST_DENOPS_PATH=$(DENOPS_PATH) deno run -A gen_samples.ts
 
 ci: test lint type complexity

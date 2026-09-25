@@ -58,8 +58,23 @@ describe("split.open", function()
 
     local window = vim:diff_window().options
     assert.are.equal(vim:diff_buffer().name, window.statusline)
-    assert.are.equal(vim:diff_buffer().name, window.winbar)
     assert.matches("%- 3$", vim:diff_buffer().name)
+  end)
+
+  it("skips the winbar when the editor has none", function()
+    split.open()
+
+    local window = vim:diff_window().options
+    assert.is_nil(window.winbar)
+  end)
+
+  it("labels the winbar when the editor uses one", function()
+    vim.o.winbar = "%f"
+
+    split.open()
+
+    local window = vim:diff_window().options
+    assert.are.equal(vim:diff_buffer().name, window.winbar)
   end)
 
   it("leaves the cursor in the source window", function()

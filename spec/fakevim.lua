@@ -195,6 +195,17 @@ local function commands(self)
       table.insert(self.win_order, 1, win)
       self.current_win = win
     end,
+    fold = function(_, first, last)
+      self.folds[#self.folds + 1] = { first = tonumber(first), last = tonumber(last) }
+    end,
+    delfold = function()
+      self.folds = {}
+    end,
+    ["normal!"] = function(rest)
+      if rest == "zE" then
+        self.folds = {}
+      end
+    end,
   }
 end
 
@@ -202,13 +213,23 @@ end
 ---@param command string
 local function run_command(self, command)
   table.insert(self.commands, command)
-  local stripped = command:gsub("^silent ", "")
+  local stripped = command:gsub("^silent!? ", "")
   local head, rest = stripped:match("^(%S+)%s*(.*)$")
+  local range_first, range_last
+  local name = head:match("^(%d+),(%d+)%a+$")
+  if name then
+    range_first, range_last, head = head:match("^(%d+),(%d+)(%a+)$")
+  else
+    head = head:match("^%%(%a+)$") and head:sub(2) or head
+    if head == "delfold" then
+      range_first, range_last = 1, -1
+    end
+  end
   local handler = commands(self)[head]
   if handler == nil then
     error("unsupported command: " .. command, 0)
   end
-  handler(rest)
+  handler(rest, range_first, range_last)
 end
 
 ---@param self table
@@ -254,14 +275,93 @@ local function api(self)
     nvim_buf_is_valid = function(bufnr)
       return self.buffers[bufnr] ~= nil
     end,
-    nvim_buf_get_lines = function()
-      return copy(current_buffer(self).lines)
+    nvim_buf_get_lines = function(bufnr)
+      local buf = bufnr == 0 and current_buffer(self).number or bufnr
+      return copy(self.buffers[buf].lines)
     end,
-    nvim_buf_set_lines = function(_, _, _, _, lines)
-      current_buffer(self).lines = copy(lines)
+    nvim_buf_set_lines = function(bufnr, _, _, _, lines)
+      local buf = bufnr == 0 and current_buffer(self).number or bufnr
+      self.buffers[buf].lines = copy(lines)
     end,
     nvim_buf_set_name = function(_, name)
       current_buffer(self).name = name
+    end,
+    nvim_create_buf = function()
+      return new_buffer(self)
+    end,
+    nvim_open_win = function(buf, enter, config)
+      local win = self.next_win
+      self.next_win = win + 1
+      self.windows[win] = { buf = buf, options = {}, cursor = { 1, 0 }, config = config or {} }
+      table.insert(self.win_order, win)
+      if enter then
+        self.current_win = win
+      end
+      return win
+    end,
+    nvim_win_close = function(win)
+      self:close_window(win)
+    end,
+    nvim_win_set_config = function(win, config)
+      local found = window(self, win)
+      for key, value in pairs(config) do
+        found.config[key] = value
+      end
+    end,
+    nvim_win_get_config = function(win)
+      local found = window(self, win)
+      local result = {}
+      for key, value in pairs(found.config) do
+        result[key] = value
+      end
+      return result
+    end,
+    nvim_buf_set_keymap = function(buf, mode, lhs, _, opts)
+      if mode ~= "n" then
+        return
+      end
+      self.keymaps[buf] = self.keymaps[buf] or {}
+      self.keymaps[buf][lhs] = opts.callback
+    end,
+    nvim_buf_delete = function(buf)
+      self.buffers[buf] = nil
+    end,
+    nvim_create_namespace = function(name)
+      return name
+    end,
+    nvim_buf_add_highlight = function(buf, ns, hl, line, col_start, col_end)
+      self.highlights[#self.highlights + 1] = {
+        buf = buf,
+        ns = ns,
+        hl = hl,
+        line = line,
+        col_start = col_start,
+        col_end = col_end,
+      }
+    end,
+    nvim_buf_clear_namespace = function()
+      self.highlights = {}
+    end,
+    nvim_buf_call = function(buf, fn)
+      local win = window_of_buffer(self, buf)
+      local saved = self.current_win
+      if win then
+        self.current_win = win
+      end
+      local ok, err = pcall(fn)
+      self.current_win = saved
+      if not ok then
+        error(err, 0)
+      end
+    end,
+    nvim_win_call = function(win, fn)
+      local saved = self.current_win
+      self.current_win = win
+      local ok, err = pcall(fn)
+      self.current_win = saved
+      if not ok then
+        error(err, 0)
+      end
     end,
   }
 end
@@ -306,8 +406,18 @@ function M.new(history, opts)
   self.next_win = 1000
   self.notifications = {}
   self.commands = {}
+  self.g = {}
+  self.keymaps = {}
   self.t = {}
-  self.o = { ignorecase = false, smartcase = false }
+  self.o = {
+    ignorecase = false,
+    smartcase = false,
+    lines = 40,
+    columns = 80,
+    winbar = "",
+  }
+  self.highlights = {}
+  self.folds = {}
   self.log = { levels = { ERROR = 4, INFO = 2 } }
 
   self.source_bn = new_buffer(self, history:lines(), options.name or "source.lua")
@@ -331,6 +441,9 @@ function M.new(history, opts)
   end
   self.notify = function(message)
     table.insert(self.notifications, message)
+  end
+  self.fn.input = function()
+    return ""
   end
   self.keycode = function(keys)
     return keys
@@ -399,6 +512,16 @@ end
 -- selene: allow(global_usage)
 function Fake:install()
   _G.vim = self
+end
+
+---@param keys string
+function Fake:press(keys)
+  local buf = current_buffer(self).number
+  local map = self.keymaps[buf] and self.keymaps[buf][keys]
+  if map == nil then
+    error("no keymap for " .. keys .. " in buffer " .. buf, 0)
+  end
+  map()
 end
 
 ---@return string

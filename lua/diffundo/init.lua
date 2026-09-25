@@ -1,6 +1,9 @@
 local count = require("diffundo.count")
 local cursor = require("diffundo.cursor")
 local lines = require("diffundo.lines")
+local pattern = require("diffundo.pattern")
+local restore = require("diffundo.restore")
+local sidebar = require("diffundo.sidebar")
 local split = require("diffundo.split")
 local subcommand = require("diffundo.subcommand")
 local walker = require("diffundo.walker")
@@ -27,21 +30,6 @@ local function cursor_neutral(fn)
   return result
 end
 
----@param fn fun()
-local function within_source(fn)
-  split.focus(true)
-  local undonr = vim.fn.changenr()
-
-  local ok, err = pcall(fn)
-
-  split.focus(true)
-  vim.cmd("silent undo " .. undonr)
-  vim.cmd("diffupdate")
-  if not ok then
-    error(err, 0)
-  end
-end
-
 ---@return string[]
 local function current_lines()
   return vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -50,7 +38,7 @@ end
 ---@param command string
 ---@param amount string
 local function early_late(command, amount)
-  within_source(function()
+  restore.within_source(function()
     vim.cmd("silent undo " .. vim.t.diffundo_diff_undonr)
     vim.cmd("silent " .. command .. " " .. amount)
     split.place(current_lines(), vim.fn.changenr())
@@ -80,11 +68,9 @@ end
 ---@return diffundo.Hit|nil
 local function match_in(regex, step, removed)
   local candidates = removed and step.removed or step.added
-  for _, line in ipairs(candidates) do
-    local col = regex:match_str(line)
-    if col then
-      return hit_for(step, line, col, removed)
-    end
+  local line, col = lines.first_match(regex, candidates)
+  if line and col then
+    return hit_for(step, line, col, removed)
   end
   return nil
 end
@@ -102,18 +88,6 @@ local function find(regex, from_seq, removed)
     end
   end
   return nil
-end
-
----@param pattern string
----@return string
-local function with_case_flag(pattern)
-  if not vim.o.ignorecase then
-    return "\\C" .. pattern
-  end
-  if vim.o.smartcase and pattern:find("%u") then
-    return "\\C" .. pattern
-  end
-  return "\\c" .. pattern
 end
 
 ---@param amount string|nil
@@ -138,12 +112,12 @@ function M.later(amount)
   end)
 end
 
----@param pattern string
+---@param needle string
 ---@param opts diffundo.SearchOpts|nil
 ---@return diffundo.Hit|nil
-function M.search(pattern, opts)
+function M.search(needle, opts)
   return cursor_neutral(function()
-    local regex = vim.regex(with_case_flag(pattern))
+    local regex = pattern.compile(needle)
     local was_open = split.is_open()
     if not split.open() then
       return nil
@@ -151,7 +125,7 @@ function M.search(pattern, opts)
     local from_seq = was_open and vim.t.diffundo_diff_undonr or vim.fn.changenr() + 1
     ---@type diffundo.Hit|nil
     local hit
-    within_source(function()
+    restore.within_source(function()
       hit = find(regex, from_seq, opts ~= nil and opts.removed == true)
     end)
     if hit == nil then
@@ -164,6 +138,10 @@ end
 ---@param sub diffundo.Subcommand
 ---@return diffundo.Hit|nil
 local function dispatch(sub)
+  if sub.name == "history" then
+    sidebar.toggle()
+    return nil
+  end
   if sub.name == "earlier" then
     M.earlier(sub.rest)
     return nil
@@ -200,22 +178,66 @@ end
 local last_args
 
 ---@param args string
+local function notify_unknown(args)
+  local head = args:match("^%s*(%S*)") or ""
+  vim.notify(
+    ('diffundo: unknown subcommand "%s" (%s)'):format(head, table.concat(subcommand.names, ", "))
+  )
+end
+
+---@param hit diffundo.Hit|nil
+---@return integer|nil
+local function reveal_search(hit)
+  if hit == nil then
+    return nil
+  end
+  return hit.seq
+end
+
+---@return integer|nil
+local function reveal_diff()
+  if split.is_open() then
+    return vim.t.diffundo_diff_undonr
+  end
+  return nil
+end
+
+---@param sub diffundo.Subcommand
+---@param hit diffundo.Hit|nil
+---@return integer|nil
+local function reveal_from(sub, hit)
+  if sub.no_history or vim.g.diffundo_history == false then
+    return nil
+  end
+  if sub.name == "search" then
+    return reveal_search(hit)
+  end
+  if sub.name == "history" then
+    return nil
+  end
+  return reveal_diff()
+end
+
+---@param args string
 function M.command(args)
   last_args = args
   pcall(vim.fn["repeat#set"], vim.keycode("<Plug>(DiffundoRepeat)"))
   local sub = subcommand.parse(args)
   if sub == nil then
-    local head = args:match("^%s*(%S*)") or ""
-    vim.notify(
-      ('diffundo: unknown subcommand "%s" (%s)'):format(head, table.concat(subcommand.names, ", "))
-    )
+    notify_unknown(args)
     return
   end
   local ok, hit = pcall(dispatch, sub)
   if not ok then
     vim.notify("diffundo: " .. tostring(hit))
-  elseif sub.name == "search" then
+    return
+  end
+  if sub.name == "search" then
     finish_search(sub, hit)
+  end
+  local seq = reveal_from(sub, hit)
+  if seq then
+    sidebar.reveal(seq)
   end
 end
 
