@@ -137,7 +137,10 @@ headless neovim through [denops.vim](https://github.com/vim-denops/denops.vim):
 
     make e2e
 
-It needs `deno` and `nvim`.
+It needs `deno` and `nvim`. `make gen` prints the undotree and rendered history
+text that real neovim produces for each sample undo shape in
+`tests/e2e/gen_samples.ts`; that output is the ground truth the golden busted
+tests in `spec/tree_spec.lua` and `spec/history_spec.lua` are derived from.
 
 Architecture Decision Records live in `docs/adr`; see `AGENTS.md` for the
 day-to-day commands.

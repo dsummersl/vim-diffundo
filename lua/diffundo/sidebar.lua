@@ -76,7 +76,7 @@ end
 
 ---@return integer|nil
 local function current_seq()
-  return vim.t.diffundo_diff_undonr or vim.fn.undotree().seq_cur
+  return vim.t.diffundo_diff_undonr or vim.t.diffundo_history_seq_cur
 end
 
 ---@return integer|nil
@@ -222,6 +222,7 @@ function M.open()
   vim.t.diffundo_history_rows = collected
   vim.t.diffundo_history_view = collected
   vim.t.diffundo_history_filter = nil
+  vim.t.diffundo_history_seq_cur = vim.fn.undotree().seq_cur
   local tree = window.open({
     lines = {},
     width = width(),
@@ -357,6 +358,7 @@ function M.close()
   vim.t.diffundo_history_view = nil
   vim.t.diffundo_history_filter = nil
   vim.t.diffundo_history_display = nil
+  vim.t.diffundo_history_seq_cur = nil
   if window.is_open(fallback) then
     vim.api.nvim_set_current_win(fallback)
   end

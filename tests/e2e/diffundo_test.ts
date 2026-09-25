@@ -50,7 +50,9 @@ async function setState(denops: Denops, lines: string[]): Promise<void> {
   // WHY: RPC calls bracket their own undo block, so the shrink must run
   // inside a single :undojoin'd command.
   await denops.cmd(`call setline(1, [${quoted}])`);
-  await denops.cmd(`silent undojoin | call deletebufline("%", ${lines.length + 1}, "$")`);
+  await denops.cmd(
+    `silent undojoin | call deletebufline("%", ${lines.length + 1}, "$")`,
+  );
   await denops.cmd("let &undolevels = &undolevels");
 }
 
@@ -66,7 +68,11 @@ async function assertCursor(
   ]);
 }
 
-async function assertNoMatch(denops: Denops, verb: string, pattern: string): Promise<void> {
+async function assertNoMatch(
+  denops: Denops,
+  verb: string,
+  pattern: string,
+): Promise<void> {
   const messages = await denops.call("execute", "messages") as string;
   assert(
     messages.includes(`diffundo: no state ${verb} a line matching ${pattern}`),
@@ -141,6 +147,27 @@ async function floatRoster(denops: Denops): Promise<FloatRoster> {
 
 // WHY: the plugin reports its own failures with print() rather than raising,
 // so they never reject the denops call and only show up in :messages.
+function captionStrings(captions: unknown): string[] {
+  if (Array.isArray(captions)) {
+    return (captions as (string | null)[]).filter((v): v is string =>
+      typeof v === "string"
+    );
+  }
+  return Object.values(captions as Record<string, unknown>).filter(
+    (v): v is string => typeof v === "string",
+  );
+}
+
+async function treeFloatLines(denops: Denops): Promise<string[]> {
+  const { tree } = await floatRoster(denops);
+  assert(tree, "the tree float is open");
+  return await floatLines(denops, tree);
+}
+
+function stripTime(line: string): string {
+  return line.replace(/\s*(?:now|\d+[smhdw]) - (\d+)$/, " TIME-$1");
+}
+
 async function assertNoErrors(denops: Denops): Promise<void> {
   assertEquals(await denops.eval("v:errmsg"), "");
   assertEquals(await denops.call("execute", "messages"), "");
@@ -243,7 +270,13 @@ async function assertHistory(
   );
 
   const buf = await denops.call("nvim_win_get_buf", tree) as number;
-  const lines = await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
+  const lines = await denops.call(
+    "nvim_buf_get_lines",
+    buf,
+    0,
+    -1,
+    false,
+  ) as string[];
   assertEquals(lines, expected);
   // WHY: the user lands in the tree float, keyboard-first.
   assertEquals(await denops.call("nvim_get_current_win"), tree);
@@ -286,7 +319,8 @@ test({
 
 test({
   mode: "nvim",
-  name: ":only after :Diffundo earlier leaves the source buffer at its latest state",
+  name:
+    ":only after :Diffundo earlier leaves the source buffer at its latest state",
   prelude,
   fn: async (denops) => {
     await denops.cmd("enew");
@@ -366,7 +400,8 @@ test({
 
 test({
   mode: "nvim",
-  name: ":Diffundo earlier {N}f steps back to the state of an earlier file write",
+  name:
+    ":Diffundo earlier {N}f steps back to the state of an earlier file write",
   prelude,
   fn: async (denops) => {
     const path = await denops.call("tempname") as string;
@@ -459,7 +494,8 @@ test({
 
 test({
   mode: "nvim",
-  name: "`.` repeats :Diffundo earlier 1f from one file write to the previous one",
+  name:
+    "`.` repeats :Diffundo earlier 1f from one file write to the previous one",
   prelude,
   fn: async (denops) => {
     const path = await denops.call("tempname") as string;
@@ -485,7 +521,8 @@ test({
 
 test({
   mode: "nvim",
-  name: ":Diffundo search shows the state that added the line and puts the cursor on it",
+  name:
+    ":Diffundo search shows the state that added the line and puts the cursor on it",
   prelude,
   fn: async (denops) => {
     await denops.cmd("enew");
@@ -541,7 +578,8 @@ test({
 
 test({
   mode: "nvim",
-  name: ":Diffundo search diffs each state against its parent across undo branches",
+  name:
+    ":Diffundo search diffs each state against its parent across undo branches",
   prelude,
   fn: async (denops) => {
     await denops.cmd("enew");
@@ -656,13 +694,17 @@ test({
     // WHY: toggled off, the current window is the source again and both
     // floats are gone.
     assertEquals((await denops.eval("&buftype")) as string, "");
-    assertEquals((await floatRoster(denops)).count, 0, "both floats close on toggle off");
+    assertEquals(
+      (await floatRoster(denops)).count,
+      0,
+      "both floats close on toggle off",
+    );
   },
 });
 
 test({
   mode: "nvim",
-  name: "a long same-branch run folds into a caption and zo unfolds it",
+  name: "a long branch stretch folds into a caption and zo unfolds it",
   prelude,
   fn: async (denops) => {
     await denops.cmd("enew");
@@ -671,24 +713,286 @@ test({
       ["one", "two"],
       ["one", "two", "three"],
       ["one", "two", "three", "four"],
+      ["one", "two", "three", "four", "five"],
+      ["one", "two", "three", "four", "five", "six"],
+      ["one", "two", "three", "four", "five", "six", "seven"],
+      ["one", "two", "three", "four", "five", "six", "seven", "eight"],
     ]);
+    await denops.cmd("silent undo 2");
+    await appendState(denops, ["one", "two", "nine"]);
 
     await denops.cmd("Diffundo history");
 
     const { tree, count } = await floatRoster(denops);
     assertEquals(count, 2, "expected tree + footer floats");
     assert(tree, "the tree float is open");
-    // WHY: folds are applied to the tree float's buffer, while the footer
-    // float is not part of the foldable rows.
-    const buf = await denops.call("nvim_win_get_buf", tree) as number;
-    const all = await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
-    const caption = all.findIndex((l) => /states:/.test(l));
-    assert(caption >= 0, all.join("\n"));
-    const captionLine = caption + 1;
+    const display = await denops.eval("t:diffundo_history_display") as {
+      folds: { start: number; stop: number }[];
+      captions: unknown;
+      row_to_line: number[];
+    };
+    assertEquals(display.folds, [{ start: 3, stop: 6 }]);
+    const caption = captionStrings(display.captions)[0];
+    assertEquals(caption, "+4 states: +4 -0 lines 4 undos");
+    assertEquals(
+      display.row_to_line,
+      [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    );
 
-    assertEquals(await denops.call("foldclosed", captionLine), captionLine);
-    await denops.cmd(`${captionLine}normal! zo`);
-    assertEquals(await denops.call("foldclosed", captionLine), -1);
+    const foldStart = display.folds[0].start;
+    assertEquals(await denops.call("foldclosed", foldStart), foldStart);
+    await denops.cmd(`${foldStart}normal! zo`);
+    assertEquals(await denops.call("foldclosed", foldStart), -1);
+  },
+});
+
+async function assertRenderedTree(
+  denops: Denops,
+  expected: string[],
+  status: RegExp,
+  total: number,
+): Promise<void> {
+  const lines = await treeFloatLines(denops);
+  assertEquals(lines.length, expected.length);
+  for (let i = 0; i < expected.length; i++) {
+    assertEquals(
+      stripTime(lines[i]),
+      stripTime(expected[i]),
+      `tree line ${i + 1}`,
+    );
+  }
+  const footer = await floatLines(denops, (await floatRoster(denops)).footer!);
+  assert(status.test(footer[0]), footer[0]);
+  assertEquals(
+    footer[footer.length - 1],
+    `${total}/${total}`.padEnd(40 - "help: g?".length) + "help: g?",
+  );
+}
+
+test({
+  mode: "nvim",
+  name: "history renders a branch off the middle with junction gutters",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["a"], ["a", "b"], ["a", "b", "c"]]);
+    await denops.cmd("silent undo 1");
+    await appendState(denops, ["a", "x"]);
+
+    await denops.cmd("Diffundo history");
+
+    await assertRenderedTree(
+      denops,
+      [
+        "○  + x                           now - 4",
+        "├┘ + c                           now - 3",
+        "├┘ + b                           now - 2",
+        "│  +1 -1 lines                   now - 1",
+      ],
+      /^#4 ○ .*\+1 -0$/,
+      4,
+    );
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "history renders two sibling branches on shared lanes",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["a"], ["a", "b"], ["a", "b", "c"]]);
+    await denops.cmd("silent undo 1");
+    await appendState(denops, ["a", "x"]);
+    await denops.cmd("silent undo 1");
+    await appendState(denops, ["a", "y"]);
+
+    await denops.cmd("Diffundo history");
+
+    await assertRenderedTree(
+      denops,
+      [
+        "○  + y                           now - 5",
+        "├┘ + x                           now - 4",
+        "┊│ + c                           now - 3",
+        "├┘ + b                           now - 2",
+        "│  +1 -1 lines                   now - 1",
+      ],
+      /^#5 ○ .*\+1 -0$/,
+      5,
+    );
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "history renders a branch off a branch on its own lane",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["a"], ["a", "b"], ["a", "b", "c"]]);
+    await denops.cmd("silent undo 1");
+    await appendState(denops, ["a", "x"]);
+    await denops.cmd("silent undo 4");
+    await appendState(denops, ["a", "x", "xx"]);
+
+    await denops.cmd("Diffundo history");
+
+    await assertRenderedTree(
+      denops,
+      [
+        "○  + xx                          now - 5",
+        "│  + x                           now - 4",
+        "├┘ + c                           now - 3",
+        "├┘ + b                           now - 2",
+        "│  +1 -1 lines                   now - 1",
+      ],
+      /^#5 ○ .*\+1 -0$/,
+      5,
+    );
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "history renders a branch off the original text with two roots",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await appendState(denops, ["a"]);
+    await denops.cmd("silent undo 0");
+    await appendState(denops, ["z"]);
+
+    await denops.cmd("Diffundo history");
+
+    await assertRenderedTree(
+      denops,
+      [
+        "○ +1 -1 lines                    now - 2",
+        "│ +1 -1 lines                    now - 1",
+      ],
+      /^#2 ○ .*\+1 -1$/,
+      2,
+    );
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "history marks saved states with ● and shows the current in the footer",
+  prelude,
+  fn: async (denops) => {
+    const path = await denops.call("tempname") as string;
+    await denops.cmd(`edit ${path}`);
+    await appendState(denops, ["a"]);
+    await denops.cmd("write");
+    await appendState(denops, ["a", "b"]);
+    await denops.cmd("write");
+    await appendState(denops, ["a", "b", "c"]);
+    await denops.cmd("write");
+    await denops.cmd("silent undo 1");
+    await appendState(denops, ["a", "x"]);
+
+    await denops.cmd("Diffundo history");
+
+    await assertRenderedTree(
+      denops,
+      [
+        "○  + x                           now - 4",
+        "├┘ + c                           now - 3",
+        "├┘ + b                           now - 2",
+        "●  +1 -1 lines                   now - 1",
+      ],
+      /^#4 ○ .*\+1 -0$/,
+      4,
+    );
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "history marks the current state that sits on the trunk below a branch",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["a"], ["a", "b"], ["a", "b", "c"]]);
+    await denops.cmd("silent undo 1");
+    await appendState(denops, ["a", "x"]);
+    await denops.cmd("silent undo 2");
+
+    await denops.cmd("Diffundo history");
+
+    await assertRenderedTree(
+      denops,
+      [
+        "│  + x                           now - 4",
+        "├┘ + c                           now - 3",
+        "├┘ + b                           now - 2",
+        "│  +1 -1 lines                   now - 1",
+      ],
+      /^#2 ○ .*\+1 -0$/,
+      4,
+    );
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "history folds a long alternate chain hanging off an early trunk state",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [
+      ["a"],
+      ["a", "b"],
+      ["a", "b", "c"],
+      ["a", "b", "c", "d"],
+      ["a", "b", "c", "d", "e"],
+      ["a", "b", "c", "d", "e", "f"],
+      ["a", "b", "c", "d", "e", "f", "g"],
+    ]);
+    await denops.cmd("silent undo 1");
+    await appendState(denops, ["a", "u"]);
+    await appendState(denops, ["a", "u", "v"]);
+    await appendState(denops, ["a", "u", "v", "w"]);
+    await appendState(denops, ["a", "u", "v", "w", "q"]);
+    await appendState(denops, ["a", "u", "v", "w", "q", "r"]);
+    await appendState(denops, ["a", "u", "v", "w", "q", "r", "s"]);
+    await appendState(denops, ["a", "u", "v", "w", "q", "r", "s", "t"]);
+
+    await denops.cmd("Diffundo history");
+
+    await assertRenderedTree(
+      denops,
+      [
+        "○  + t                          now - 14",
+        "│  + s                          now - 13",
+        "│  + r                          now - 12",
+        "│  + q                          now - 11",
+        "│  + w                          now - 10",
+        "│  + v                           now - 9",
+        "│  + u                           now - 8",
+        "├┘ + g                           now - 7",
+        "┊│ + f                           now - 6",
+        "┊│ + e                           now - 5",
+        "┊│ + d                           now - 4",
+        "┊│ + c                           now - 3",
+        "├┘ + b                           now - 2",
+        "│  +1 -1 lines                   now - 1",
+      ],
+      /^#14 ○ .*\+1 -0$/,
+      14,
+    );
+
+    const display = await denops.eval("t:diffundo_history_display") as {
+      folds: { start: number; stop: number }[];
+      row_to_line: number[];
+    };
+    assertEquals(display.folds, [{ start: 9, stop: 12 }]);
+    assertEquals(
+      display.row_to_line,
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    );
   },
 });
 
@@ -723,7 +1027,9 @@ test({
     await denops.call("feedkeys", "j", "x");
     await denops.call("nvim_input", "<CR>");
 
-    const window = (await windowStates(denops)).find((w) => w.buftype === "nofile");
+    const window = (await windowStates(denops)).find((w) =>
+      w.buftype === "nofile"
+    );
     assert(window, "diff split still open");
     assertEquals(window.lines, ["one"]);
     assertEquals(await denops.eval("t:diffundo_diff_undonr"), 1);

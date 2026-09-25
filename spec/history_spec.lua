@@ -863,3 +863,182 @@ describe("history.display with sibling branches", function()
     assert.are.equal(21, display.footer_start)
   end)
 end)
+
+describe("history.rows mirrors real neovim undo trees", function()
+  it("walks a real branch off the middle newest first", function()
+    local h = fakevim.history({ { "" }, { "a" }, { "a", "b" }, { "a", "b", "c" } })
+    h:branch(1, { "a", "x" })
+    fakevim.new(h):install()
+
+    local rows = history.rows({})
+    local seqs, parents = {}, {}
+    for i, r in ipairs(rows) do
+      seqs[i] = r.seq
+      parents[i] = r.parent
+    end
+    assert.are.same({ 4, 3, 2, 1 }, seqs)
+    assert.are.same({ 1, 2, 1, 0 }, parents)
+    assert.are.same({ "x" }, rows[1].added)
+    assert.are.same({ "a" }, rows[4].added)
+    assert.are.same({ "" }, rows[4].removed)
+  end)
+
+  it("walks real sibling branches off one parent", function()
+    local h = fakevim.history({ { "" }, { "a" }, { "a", "b" }, { "a", "b", "c" } })
+    h:branch(1, { "a", "x" })
+    h:branch(1, { "a", "y" })
+    fakevim.new(h):install()
+
+    local rows = history.rows({})
+    local seqs, parents = {}, {}
+    for i, r in ipairs(rows) do
+      seqs[i] = r.seq
+      parents[i] = r.parent
+    end
+    assert.are.same({ 5, 4, 3, 2, 1 }, seqs)
+    assert.are.same({ 1, 1, 2, 1, 0 }, parents)
+    assert.are.same({ "y" }, rows[1].added)
+    assert.are.same({ "x" }, rows[2].added)
+  end)
+
+  it("walks a real long alternate chain off an early trunk state", function()
+    local h = fakevim.history({
+      { "" },
+      { "a" },
+      { "a", "b" },
+      { "a", "b", "c" },
+      { "a", "b", "c", "d" },
+      { "a", "b", "c", "d", "e" },
+      { "a", "b", "c", "d", "e", "f" },
+      { "a", "b", "c", "d", "e", "f", "g" },
+    })
+    h:branch(1, { "a", "u" })
+    h:branch(8, { "a", "u", "v" })
+    h:branch(9, { "a", "u", "v", "w" })
+    h:branch(10, { "a", "u", "v", "w", "q" })
+    h:branch(11, { "a", "u", "v", "w", "q", "r" })
+    h:branch(12, { "a", "u", "v", "w", "q", "r", "s" })
+    h:branch(13, { "a", "u", "v", "w", "q", "r", "s", "t" })
+    fakevim.new(h):install()
+
+    local rows = history.rows({})
+    local seqs, parents = {}, {}
+    for i, r in ipairs(rows) do
+      seqs[i] = r.seq
+      parents[i] = r.parent
+    end
+    assert.are.same({ 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 }, seqs)
+    assert.are.same({ 13, 12, 11, 10, 9, 8, 1, 6, 5, 4, 3, 2, 1, 0 }, parents)
+  end)
+end)
+
+describe("history.display with real neovim undo shapes", function()
+  local function row(over)
+    local base = { seq = 4, time = os.time() - 1, save = nil, added = {}, removed = {}, parent = 3 }
+    for key, value in pairs(over or {}) do
+      base[key] = value
+    end
+    return base
+  end
+
+  ---@param display diffundo.Display
+  ---@param expected string[]
+  local function assert_tree_lines(display, expected)
+    for i, line in ipairs(expected) do
+      assert.are.equal(line, display.lines[i])
+    end
+    assert.are.equal(#expected + 2, #display.lines)
+  end
+
+  it("renders a real branch off the middle with junctions", function()
+    local rows = {
+      row({ seq = 4, parent = 1, added = { "x" } }),
+      row({ seq = 3, parent = 2, added = { "c" } }),
+      row({ seq = 2, parent = 1, added = { "b" } }),
+      row({ seq = 1, parent = 0, added = { "a" }, removed = { "" } }),
+    }
+    local display = history.display(rows, { width = 40, current = 4 })
+
+    assert_tree_lines(display, {
+      "○  + x                           now - 4",
+      "├┘ + c                           now - 3",
+      "├┘ + b                           now - 2",
+      "│  +1 -1 lines                   now - 1",
+    })
+  end)
+
+  it("renders real sibling branches on shared lanes", function()
+    local rows = {
+      row({ seq = 5, parent = 1, added = { "y" } }),
+      row({ seq = 4, parent = 1, added = { "x" } }),
+      row({ seq = 3, parent = 2, added = { "c" } }),
+      row({ seq = 2, parent = 1, added = { "b" } }),
+      row({ seq = 1, parent = 0, added = { "a" }, removed = { "" } }),
+    }
+    local display = history.display(rows, { width = 40, current = 5 })
+
+    assert_tree_lines(display, {
+      "○  + y                           now - 5",
+      "├┘ + x                           now - 4",
+      "┊│ + c                           now - 3",
+      "├┘ + b                           now - 2",
+      "│  +1 -1 lines                   now - 1",
+    })
+  end)
+
+  it("renders a real branch off the original text", function()
+    local rows = {
+      row({ seq = 2, parent = 0, added = { "z" }, removed = { "" } }),
+      row({ seq = 1, parent = 0, added = { "a" }, removed = { "" } }),
+    }
+    local display = history.display(rows, { width = 40, current = 2 })
+
+    assert_tree_lines(display, {
+      "○ +1 -1 lines                    now - 2",
+      "│ +1 -1 lines                    now - 1",
+    })
+  end)
+
+  it("marks the saved state in a real saved branch", function()
+    local rows = {
+      row({ seq = 4, parent = 1, added = { "x" } }),
+      row({ seq = 3, parent = 2, added = { "c" }, save = 3 }),
+      row({ seq = 2, parent = 1, added = { "b" }, save = 2 }),
+      row({ seq = 1, parent = 0, added = { "a" }, removed = { "" }, save = 1 }),
+    }
+    local display = history.display(rows, { width = 40, current = 4 })
+
+    assert_tree_lines(display, {
+      "○  + x                           now - 4",
+      "├┘ + c                           now - 3",
+      "├┘ + b                           now - 2",
+      "●  +1 -1 lines                   now - 1",
+    })
+  end)
+
+  it("folds the real long alternate chain off an early trunk", function()
+    local rows = {
+      row({ seq = 14, parent = 13, added = { "t" } }),
+      row({ seq = 13, parent = 12, added = { "s" } }),
+      row({ seq = 12, parent = 11, added = { "r" } }),
+      row({ seq = 11, parent = 10, added = { "q" } }),
+      row({ seq = 10, parent = 9, added = { "w" } }),
+      row({ seq = 9, parent = 8, added = { "v" } }),
+      row({ seq = 8, parent = 1, added = { "u" } }),
+      row({ seq = 7, parent = 6, added = { "g" } }),
+      row({ seq = 6, parent = 5, added = { "f" } }),
+      row({ seq = 5, parent = 4, added = { "e" } }),
+      row({ seq = 4, parent = 3, added = { "d" } }),
+      row({ seq = 3, parent = 2, added = { "c" } }),
+      row({ seq = 2, parent = 1, added = { "b" } }),
+      row({ seq = 1, parent = 0, added = { "a" }, removed = { "" } }),
+    }
+    local display = history.display(rows, { width = 40, current = 14 })
+
+    assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }, display.row_to_line)
+    assert.are.same({ { start = 9, stop = 12 } }, display.folds)
+    assert.are.same({ [9] = "+4 states: +4 -0 lines 4 undos" }, display.captions)
+    assert.matches("^#14 ○ ", display.lines[#display.lines - 1])
+    assert.matches("14/14", display.lines[#display.lines])
+  end)
+end)
