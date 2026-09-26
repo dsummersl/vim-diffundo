@@ -161,11 +161,11 @@ const scenarios: Scenario[] = [
       const path = await denops.call("tempname") as string;
       await denops.cmd(`edit ${path}`);
       await state(denops, ["a"]);
-      await denops.cmd("write");
+      await denops.cmd("silent write");
       await state(denops, ["a", "b"]);
-      await denops.cmd("write");
+      await denops.cmd("silent write");
       await state(denops, ["a", "b", "c"]);
-      await denops.cmd("write");
+      await denops.cmd("silent write");
       await denops.cmd("silent undo 1");
       await state(denops, ["a", "x"]);
     },

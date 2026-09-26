@@ -437,9 +437,9 @@ test({
     await denops.cmd(`edit ${path}`);
 
     await appendState(denops, ["one"]);
-    await denops.cmd("write");
+    await denops.cmd("silent write");
     await appendState(denops, ["one", "two"]);
-    await denops.cmd("write");
+    await denops.cmd("silent write");
     await appendState(denops, ["one", "two", "three"]);
 
     await denops.cmd("Diffundo earlier 1f");
@@ -531,9 +531,9 @@ test({
     await denops.cmd(`edit ${path}`);
 
     await appendState(denops, ["one"]);
-    await denops.cmd("write");
+    await denops.cmd("silent write");
     await appendState(denops, ["one", "two"]);
-    await denops.cmd("write");
+    await denops.cmd("silent write");
     await appendState(denops, ["one", "two", "three"]);
 
     await denops.cmd("Diffundo earlier 1f");
@@ -914,11 +914,11 @@ test({
     const path = await denops.call("tempname") as string;
     await denops.cmd(`edit ${path}`);
     await appendState(denops, ["a"]);
-    await denops.cmd("write");
+    await denops.cmd("silent write");
     await appendState(denops, ["a", "b"]);
-    await denops.cmd("write");
+    await denops.cmd("silent write");
     await appendState(denops, ["a", "b", "c"]);
-    await denops.cmd("write");
+    await denops.cmd("silent write");
     await denops.cmd("silent undo 1");
     await appendState(denops, ["a", "x"]);
 
