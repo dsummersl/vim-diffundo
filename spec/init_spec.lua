@@ -137,6 +137,52 @@ describe("diffundo", function()
     end)
   end)
 
+  describe("undo", function()
+    it("jumps straight to the given undo number", function()
+      diffundo.undo("1")
+
+      assert.are.same({ "first" }, vim:diff_buffer().lines)
+      assert.are.equal(1, vim.t.diffundo_diff_undonr)
+      assert.are.equal(3, vim.history.seq)
+      assert.are.same({ "first", "second", "third" }, vim:source_buffer().lines)
+    end)
+
+    it("opens the split itself", function()
+      diffundo.undo("2")
+
+      assert.are.same({ "first", "second" }, vim:diff_buffer().lines)
+    end)
+
+    it("rejects a unit suffix", function()
+      assert.has_error(function()
+        diffundo.undo("2f")
+      end, "invalid undo number: 2f (expected a plain number)")
+      assert.is_nil(vim.t.diffundo_diff_bn)
+    end)
+
+    it("rejects a missing number", function()
+      assert.has_error(function()
+        diffundo.undo("")
+      end, "invalid undo number:  (expected a plain number)")
+    end)
+  end)
+
+  describe("close", function()
+    it("closes the diff split", function()
+      split.open()
+
+      diffundo.close()
+
+      assert.is_false(split.is_open())
+    end)
+
+    it("is a no-op when nothing is open", function()
+      diffundo.close()
+
+      assert.is_false(split.is_open())
+    end)
+  end)
+
   describe("earlier errors", function()
     it("raises an invalid count", function()
       assert.has_error(function()
@@ -334,11 +380,33 @@ describe("diffundo", function()
       assert.are.equal(2, vim.t.diffundo_diff_undonr)
     end)
 
+    it("dispatches undo with the given number", function()
+      diffundo.command("undo 2")
+
+      assert.are.same({ "first", "second" }, vim:diff_buffer().lines)
+      assert.are.equal(2, vim.t.diffundo_diff_undonr)
+    end)
+
+    it("requires a number for undo", function()
+      diffundo.command("undo")
+
+      assert.are.equal("diffundo: undo needs a number", vim:last_notification())
+      assert.is_nil(vim.t.diffundo_diff_bn)
+    end)
+
+    it("dispatches close", function()
+      diffundo.command("earlier")
+
+      diffundo.command("close")
+
+      assert.is_false(split.is_open())
+    end)
+
     it("reports an unknown subcommand", function()
       diffundo.command("nonesuch 1")
 
       assert.are.equal(
-        'diffundo: unknown subcommand "nonesuch" (earlier, later, search, search!, focus)',
+        'diffundo: unknown subcommand "nonesuch" (earlier, later, undo, search, search!, focus, close)',
         vim:last_notification()
       )
     end)

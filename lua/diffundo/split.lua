@@ -88,6 +88,17 @@ local function leave_stale_diff_window()
   vim.api.nvim_set_current_win(source_win)
 end
 
+function M.close()
+  if not M.is_open() then
+    return
+  end
+
+  local diff_win = M.window_of_buffer(vim.t.diffundo_diff_bn)
+  if diff_win ~= nil then
+    vim.api.nvim_win_close(diff_win, true)
+  end
+end
+
 ---@return boolean
 function M.open()
   if M.is_open() then

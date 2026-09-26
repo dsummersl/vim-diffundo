@@ -22,6 +22,10 @@ One command, `:Diffundo`, with subcommands (tab-completes):
 
 *:Diffundo later [count]* : the same for `:later`.
 
+*:Diffundo undo {n}* : compare your current buffer against the buffer at exactly
+undo number `{n}` (as reported by `:undolist` or the history pane), the same
+state `:undo {n}` would restore.
+
 *:Diffundo search {pattern}* : find the undo state whose edit **added** a line matching `{pattern}` (a vim regex, so `'ignorecase'` and `'smartcase'` apply as with `/`), show it in the diff split, and put your cursor on the match. Repeat it to find the next older one.
 
 *:Diffundo search! {pattern}* : the same for a line that was **removed**.
@@ -40,6 +44,8 @@ move between written states, *<cr>* shows the selected state in the diff split,
 clear) and puts the cursor on the newest match, *zo*/*zc* open and close
 folds (a fold you opened stays open when *<cr>* re-renders the pane), *g?* notifies this key map, and *q*/*<esc>* (or leaving the window, e.g.
 *<c-w>p*) collapse the pane and return to your buffer.
+
+*:Diffundo close* : close the diff split and history pane, if either is open.
 
 Search walks the undo *tree*: each state is compared with the state it was
 edited from, so switching undo branches never shows up as a change.
@@ -60,9 +66,11 @@ local diffundo = require("diffundo")
 
 diffundo.earlier("1f")
 diffundo.later()
+diffundo.undo("12")
 local hit = diffundo.search("TODO")                    -- nil when nothing matches
 local gone = diffundo.search("TODO", { removed = true })
 -- hit = { seq, time, save, line, col, lnum }
+diffundo.close()
 ```
 
 `require("diffundo.walker").steps(from_seq)` is the iterator underneath: it

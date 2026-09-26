@@ -113,6 +113,26 @@ function M.later(amount)
   step("later", amount)
 end
 
+---@param seq string
+function M.undo(seq)
+  cursor_neutral(function()
+    local normalized = count.exact(seq)
+    split.open()
+    restore.within_source(function()
+      vim.cmd("silent undo " .. normalized)
+      split.place(current_lines(), vim.fn.changenr())
+    end)
+    pane.set_filter(nil)
+    pane.render()
+    return nil
+  end)
+end
+
+function M.close()
+  pane.close()
+  split.close()
+end
+
 function M.focus()
   if not split.is_open() then
     cursor_neutral(function()
@@ -156,12 +176,23 @@ local function dispatch(sub)
     M.focus()
     return nil
   end
+  if sub.name == "close" then
+    M.close()
+    return nil
+  end
   if sub.name == "earlier" then
     M.earlier(sub.rest)
     return nil
   end
   if sub.name == "later" then
     M.later(sub.rest)
+    return nil
+  end
+  if sub.name == "undo" then
+    if sub.rest == "" then
+      error("undo needs a number", 0)
+    end
+    M.undo(sub.rest)
     return nil
   end
   if sub.rest == "" then

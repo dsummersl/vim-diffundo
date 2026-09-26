@@ -39,12 +39,28 @@ describe("subcommand.parse", function()
   it("parses the focus subcommand", function()
     assert.are.same({ name = "focus", bang = false, rest = "" }, subcommand.parse("focus"))
   end)
+
+  it("parses the undo subcommand", function()
+    assert.are.same({ name = "undo", bang = false, rest = "3" }, subcommand.parse("undo 3"))
+  end)
+
+  it("rejects a bang on undo", function()
+    assert.is_nil(subcommand.parse("undo! 3"))
+  end)
+
+  it("parses the close subcommand", function()
+    assert.are.same({ name = "close", bang = false, rest = "" }, subcommand.parse("close"))
+  end)
+
+  it("rejects a bang on close", function()
+    assert.is_nil(subcommand.parse("close!"))
+  end)
 end)
 
 describe("subcommand.complete", function()
   it("offers every name for an empty first argument", function()
     assert.are.same(
-      { "earlier", "later", "search", "search!", "focus" },
+      { "earlier", "later", "undo", "search", "search!", "focus", "close" },
       subcommand.complete("", "Diffundo ")
     )
   end)

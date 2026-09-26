@@ -103,6 +103,30 @@ describe("split.open", function()
   end)
 end)
 
+describe("split.close", function()
+  local vim
+
+  before_each(function()
+    vim = fakevim.new(three_states())
+    vim:install()
+  end)
+
+  it("closes the diff window", function()
+    split.open()
+
+    split.close()
+
+    assert.is_false(split.is_open())
+    assert.are.equal(1, #vim.win_order)
+  end)
+
+  it("is a no-op when nothing is open", function()
+    split.close()
+
+    assert.is_false(split.is_open())
+  end)
+end)
+
 describe("split.focus", function()
   it("reports a tab without the split", function()
     fakevim.new(three_states()):install()
