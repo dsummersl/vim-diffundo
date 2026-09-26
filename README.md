@@ -88,18 +88,18 @@ the focus, so you can keep editing and keep pressing `.`:
 ╭─ #4  2026-09-26 10:12:03 ────────╮
 │@ + return x                   #12│   <- the state your buffer is at
 │┆   7 undos 1w                    │   <- states in between (and writes)
-│○ - local y = 1                 #4│   <- the state the diff shows
+│╷ - local y = 1                 #4│   <- the state the diff shows, bolded
 │┆   3 undos                       │
 ╰──────────────────── +3 -5 lines ─╯
 ```
 
 The title is the diff's state and its date; the footer is the size of the diff
 against your buffer. Each row is `lanes pip preview #seq`: the pip is `@` for
-your buffer's state, `w` for a written state and `○` for the diff's state
-(first match wins), otherwise the tree lane. A buffer with no changes still
-opens, against `#0`, so you can leave the pane up and watch your edits pile up.
-It flips to the upper corner when your cursor would sit under it, and closes
-with the diff window.
+your buffer's state, `w` for a written state, otherwise the tree lane; the
+diff's own row carries no separate pip, it's the one shown in bold. A buffer
+with no changes still opens, against `#0`, so you can leave the pane up and
+watch your edits pile up. It flips to the upper corner when your cursor would
+sit under it, and closes with the diff window.
 
 `:Diffundo focus` expands the pane into the whole tree, using the same row
 format; branch stretches longer than `g:diffundo_fold_min` fold into
@@ -115,11 +115,11 @@ vim.g.diffundo_history_width = 40                  -- pane width
 vim.g.diffundo_fold_min = 3                        -- expanded-view fold threshold
 ```
 
-The default glyphs are `{ buffer = "@", diff = "○", write = "w", gap = "┆",
+The default glyphs are `{ buffer = "@", write = "w", gap = "┆",
 ellipsis = "…" }`. `ⓦ` is opt-in because terminals disagree on the width of
 circled letters (kitty and WezTerm draw it in one cell). The pane's rows use the
-`DiffundoGap` (gap rows, linked to `Comment`), `DiffundoDiff` (linked to
-`CursorLine`) and `DiffundoBuffer` (bold) highlight groups.
+`DiffundoGap` (gap rows, linked to `Comment`), `DiffundoDiff` (the diff's row,
+linked to `CursorLine` and bold) and `DiffundoBuffer` (bold) highlight groups.
 
 The rows come from `require("diffundo.history").rows`; each state's text and
 its diff size against your buffer are cached, so the pane only walks new undo

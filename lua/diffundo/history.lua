@@ -396,17 +396,14 @@ local function pip_for(r, opts, g)
   if r.save then
     return g.write
   end
-  if r.seq == opts.current then
-    return g.diff
-  end
-  return "│"
+  return "╷"
 end
 
 ---@param pip string
 ---@return string
 local function cap_for(pip)
-  if pip == "│" then
-    return "┘"
+  if pip == "╷" then
+    return "╯"
   end
   return pip
 end

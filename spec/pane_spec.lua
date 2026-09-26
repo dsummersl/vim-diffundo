@@ -125,7 +125,10 @@ describe("pane.render", function()
 
     assert.is_true(#vim.highlights > 0)
     assert.are.same({ link = "Comment", default = true }, vim.hl_groups.DiffundoGap)
-    assert.are.same({ link = "CursorLine", default = true }, vim.hl_groups.DiffundoDiff)
+    assert.are.same(
+      { link = "CursorLine", bold = true, default = true },
+      vim.hl_groups.DiffundoDiff
+    )
     assert.are.same({ bold = true, default = true }, vim.hl_groups.DiffundoBuffer)
   end)
 
@@ -198,9 +201,9 @@ describe("pane.focus", function()
     assert.are.equal(vim:pane_window(), vim.current_win)
     assert.are.same({
       "@ + c                               #3",
-      "○ + b                               #2",
-      "│ + a                               #1",
-      "│                                   #0",
+      "╷ + b                               #2",
+      "╷ + a                               #1",
+      "╷                                   #0",
     }, vim:pane_lines())
     assert.are.same({ 2, 0 }, vim.windows[vim:pane_window()].cursor)
     assert.is_true(config(vim).focusable)
@@ -298,7 +301,7 @@ describe("pane.focus", function()
 
     assert.are.same({
       "┆   1 undo",
-      "○ + b                               #2",
+      "╷ + b                               #2",
       "┆   1 undo",
     }, vim:pane_lines())
     assert.are.same({ 2, 0 }, vim.windows[vim:pane_window()].cursor)
@@ -319,7 +322,7 @@ describe("pane.focus", function()
     vim:press("q")
 
     assert.are.same(
-      { "┆   2 undos", "│ + a                               #1" },
+      { "┆   2 undos", "╷ + a                               #1" },
       vim:pane_lines()
     )
     assert.are.equal(" filter: a ", config(vim).footer)

@@ -329,7 +329,7 @@ end
 
 local function define_highlights()
   vim.api.nvim_set_hl(0, "DiffundoGap", { link = "Comment", default = true })
-  vim.api.nvim_set_hl(0, "DiffundoDiff", { link = "CursorLine", default = true })
+  vim.api.nvim_set_hl(0, "DiffundoDiff", { link = "CursorLine", bold = true, default = true })
   vim.api.nvim_set_hl(0, "DiffundoBuffer", { bold = true, default = true })
 end
 
