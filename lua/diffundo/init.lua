@@ -3,7 +3,7 @@ local cursor = require("diffundo.cursor")
 local lines = require("diffundo.lines")
 local pattern = require("diffundo.pattern")
 local restore = require("diffundo.restore")
-local sidebar = require("diffundo.sidebar")
+local pane = require("diffundo.pane")
 local split = require("diffundo.split")
 local subcommand = require("diffundo.subcommand")
 local walker = require("diffundo.walker")
@@ -90,26 +90,39 @@ local function find(regex, from_seq, removed)
   return nil
 end
 
+---@param command string
 ---@param amount string|nil
-function M.earlier(amount)
+local function step(command, amount)
   cursor_neutral(function()
     local normalized = count.normalize(amount)
-    if split.open() then
-      early_late("earlier", normalized)
-    end
+    split.open()
+    early_late(command, normalized)
+    pane.render()
     return nil
   end)
 end
 
 ---@param amount string|nil
+function M.earlier(amount)
+  step("earlier", amount)
+end
+
+---@param amount string|nil
 function M.later(amount)
-  cursor_neutral(function()
-    local normalized = count.normalize(amount)
-    if split.open() then
-      early_late("later", normalized)
-    end
-    return nil
-  end)
+  step("later", amount)
+end
+
+function M.focus()
+  if not split.is_open() then
+    cursor_neutral(function()
+      split.open()
+      restore.within_source(function()
+        split.place(current_lines(), vim.fn.changenr())
+      end)
+      return nil
+    end)
+  end
+  pane.focus()
 end
 
 ---@param needle string
@@ -119,9 +132,7 @@ function M.search(needle, opts)
   return cursor_neutral(function()
     local regex = pattern.compile(needle)
     local was_open = split.is_open()
-    if not split.open() then
-      return nil
-    end
+    split.open()
     local from_seq = was_open and vim.t.diffundo_diff_undonr or vim.fn.changenr() + 1
     ---@type diffundo.Hit|nil
     local hit
@@ -131,6 +142,7 @@ function M.search(needle, opts)
     if hit == nil then
       split.place(current_lines(), vim.fn.changenr())
     end
+    pane.render()
     return hit
   end)
 end
@@ -138,8 +150,8 @@ end
 ---@param sub diffundo.Subcommand
 ---@return diffundo.Hit|nil
 local function dispatch(sub)
-  if sub.name == "history" then
-    sidebar.toggle()
+  if sub.name == "focus" then
+    M.focus()
     return nil
   end
   if sub.name == "earlier" then
@@ -185,39 +197,6 @@ local function notify_unknown(args)
   )
 end
 
----@param hit diffundo.Hit|nil
----@return integer|nil
-local function reveal_search(hit)
-  if hit == nil then
-    return nil
-  end
-  return hit.seq
-end
-
----@return integer|nil
-local function reveal_diff()
-  if split.is_open() then
-    return vim.t.diffundo_diff_undonr
-  end
-  return nil
-end
-
----@param sub diffundo.Subcommand
----@param hit diffundo.Hit|nil
----@return integer|nil
-local function reveal_from(sub, hit)
-  if sub.no_history or vim.g.diffundo_history == false then
-    return nil
-  end
-  if sub.name == "search" then
-    return reveal_search(hit)
-  end
-  if sub.name == "history" then
-    return nil
-  end
-  return reveal_diff()
-end
-
 ---@param args string
 function M.command(args)
   last_args = args
@@ -234,10 +213,6 @@ function M.command(args)
   end
   if sub.name == "search" then
     finish_search(sub, hit)
-  end
-  local seq = reveal_from(sub, hit)
-  if seq then
-    sidebar.reveal(seq)
   end
 end
 

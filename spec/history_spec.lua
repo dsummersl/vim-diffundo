@@ -12,6 +12,19 @@ local function step(over)
   return base
 end
 
+---@param s string
+---@return integer
+local function cell_width(s)
+  local width = 0
+  for i = 1, #s do
+    local b = s:byte(i)
+    if b < 0x80 or b >= 0xC0 then
+      width = width + 1
+    end
+  end
+  return width
+end
+
 local vim
 
 before_each(function()
@@ -28,18 +41,11 @@ describe("history.row_for", function()
     assert.are.same({ "x" }, row.added)
     assert.are.same({ "y" }, row.removed)
   end)
-
-  it("labels a row with its relative time and sequence", function()
-    local row = history.row_for(step({ seq = 2 }))
-
-    assert.matches("%d+y ago %- 2$", row.label)
-  end)
 end)
 
 describe("history.preview_parts", function()
   local function row(over)
-    local base =
-      { seq = 4, time = 1004, save = nil, added = {}, removed = {}, parent = 3, label = "" }
+    local base = { seq = 4, time = 1004, save = nil, added = {}, removed = {}, parent = 3 }
     for key, value in pairs(over or {}) do
       base[key] = value
     end
@@ -72,53 +78,101 @@ describe("history.preview_parts", function()
   it("omits zero sides and pluralises", function()
     assert.are.equal("-3 lines", history.preview_parts(row({ removed = { "a", "b", "c" } })))
     assert.are.equal("+2 lines", history.preview_parts(row({ added = { "a", "b" } })))
+    assert.are.equal("+0 lines", history.preview_parts(row({})))
   end)
-end)
 
-describe("history.time_width", function()
-  it("sizes the time column to the longest row label", function()
-    local view = {
-      { seq = 3, time = os.time() - 2 * 86400 },
-      { seq = 20, time = os.time() - 120 },
-    }
-
-    assert.are.equal(8, history.time_width(view))
+  it("shows nothing for the original text", function()
+    assert.are.equal("", history.preview_parts(row({ seq = 0 })))
   end)
 end)
 
 describe("history.rows", function()
-  it("walks the whole history newest first and restores the live state", function()
+  local function undos()
+    local count = 0
+    for _, command in ipairs(vim.commands) do
+      if command:match("^silent undo ") then
+        count = count + 1
+      end
+    end
+    return count
+  end
+
+  it("walks the whole history newest first, ends at #0 and restores the live state", function()
     local rows = history.rows({})
 
-    assert.are.same({ 3, 2, 1 }, { rows[1].seq, rows[2].seq, rows[3].seq })
+    assert.are.same({ 3, 2, 1, 0 }, { rows[1].seq, rows[2].seq, rows[3].seq, rows[4].seq })
     assert.are.same({ "c" }, rows[1].added)
     assert.are.equal(3, vim.history.seq)
   end)
 
-  it("caps at the limit, appends the sentinel, and stops the walk", function()
+  it("caps at the limit and stops the walk", function()
     local rows = history.rows({ limit = 1 })
 
     assert.are.same({ 3, 0 }, { rows[1].seq, rows[2].seq })
-    local undos = 0
-    for _, command in ipairs(vim.commands) do
-      if command:match("^silent undo ") then
-        undos = undos + 1
-      end
-    end
-    assert.are.equal(5, undos)
+    assert.are.equal(5, undos())
   end)
 
-  it("does not append the sentinel when the limit is not reached", function()
-    local rows = history.rows({ limit = 10 })
-
-    assert.are.equal(3, #rows)
-  end)
-
-  it("returns nothing for an empty history", function()
+  it("returns just #0 for an empty history", function()
     local empty = fakevim.new(fakevim.history({ {} }))
     empty:install()
 
-    assert.are.same({}, history.rows({}))
+    local rows = history.rows({})
+
+    assert.are.equal(1, #rows)
+    assert.are.equal(0, rows[1].seq)
+  end)
+
+  it("hands every state's lines, #0 included, to on_lines", function()
+    local seen = {}
+
+    history.rows({
+      on_lines = function(seq, lines)
+        seen[seq] = lines
+      end,
+    })
+
+    assert.are.same({ "a", "b", "c" }, seen[3])
+    assert.are.same({ "a" }, seen[1])
+    assert.are.same({}, seen[0])
+  end)
+
+  it("walks only the states newer than the known rows", function()
+    local known = history.rows({})
+    vim.history:branch(3, { "a", "b", "c", "d" }, { save = 1 })
+    vim.commands = {}
+
+    local rows = history.rows({ known = known })
+
+    assert.are.same({ 4, 3, 2, 1, 0 }, {
+      rows[1].seq,
+      rows[2].seq,
+      rows[3].seq,
+      rows[4].seq,
+      rows[5].seq,
+    })
+    assert.are.equal(known[1], rows[2])
+    assert.are.equal(1, rows[1].save)
+    assert.are.equal(3, undos())
+  end)
+
+  it("refreshes the saves of the known rows", function()
+    local known = history.rows({})
+    vim.history.entries[2].save = 1
+
+    local rows = history.rows({ known = known })
+
+    assert.are.equal(1, rows[2].save)
+  end)
+
+  it("starts over when the known rows are newer than the history", function()
+    local known = history.rows({})
+    local shorter = fakevim.new(fakevim.history({ {}, { "z" } }))
+    shorter:install()
+
+    local rows = history.rows({ known = known })
+
+    assert.are.same({ 1, 0 }, { rows[1].seq, rows[2].seq })
+    assert.are.same({ "z" }, rows[1].added)
   end)
 end)
 
@@ -140,9 +194,9 @@ describe("history.next", function()
     assert.are.equal(2, history.next(rows(), 1, { dir = 1, written = true }))
     assert.are.equal(2, history.next(rows(), 3, { dir = -1, written = true }))
     local candidates = {
-      { seq = 3, time = 0, added = {}, removed = {}, label = "", save = nil },
-      { seq = 2, time = 0, added = {}, removed = {}, label = "", save = nil },
-      { seq = 1, time = 0, added = {}, removed = {}, label = "", save = 1 },
+      { seq = 3, time = 0, added = {}, removed = {}, save = nil },
+      { seq = 2, time = 0, added = {}, removed = {}, save = nil },
+      { seq = 1, time = 0, added = {}, removed = {}, save = 1 },
     }
     assert.are.equal(3, history.next(candidates, 1, { dir = 1, written = true }))
   end)
@@ -176,66 +230,107 @@ describe("history.filtered", function()
   end)
 end)
 
-describe("history.display", function()
-  local function row(over)
-    local base =
-      { seq = 4, time = os.time() - 120, save = nil, added = {}, removed = {}, parent = 3 }
-    for key, value in pairs(over or {}) do
-      base[key] = value
-    end
-    return base
+---@param over table|nil
+---@return diffundo.Row
+local function row(over)
+  local base = { seq = 4, time = 1004, save = nil, added = {}, removed = {}, parent = 3 }
+  for key, value in pairs(over or {}) do
+    base[key] = value
   end
+  return base
+end
 
-  local function cell_width(s)
-    local width = 0
-    for i = 1, #s do
-      local b = s:byte(i)
-      if b < 0x80 or b >= 0xC0 then
-        width = width + 1
-      end
-    end
-    return width
-  end
+---@return diffundo.Row
+local function original()
+  return row({ seq = 0, parent = 0 })
+end
 
-  it("renders a linear chain with flat gutters and right-aligned time", function()
+describe("history.display rows", function()
+  it("renders a linear chain with the undo number right-aligned", function()
     local rows = {
-      row({ seq = 3, parent = 2, time = os.time() - 120, added = { "foo()" } }),
-      row({ seq = 2, parent = 1, time = os.time() - 240 }),
-      row({ seq = 1, parent = 0, time = os.time() - 300 }),
+      row({ seq = 3, parent = 2, added = { "foo()" } }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0 }),
+      original(),
     }
     local display = history.display(rows, { width = 30 })
 
-    assert.matches("^│ %+ foo%(%)", display.lines[1])
-    assert.matches("2m %- 3$", display.lines[1])
-    assert.matches("^│", display.lines[2])
-    assert.matches("^│", display.lines[3])
-    assert.are.same({ 1, 2, 3 }, display.row_to_line)
+    assert.are.same({
+      "│ + foo()                   #3",
+      "│ +0 lines                  #2",
+      "│ +0 lines                  #1",
+      "│                           #0",
+    }, display.lines)
+    assert.are.same({ 1, 2, 3, 4 }, display.row_to_line)
   end)
 
-  it("marks the diff's state with the current glyph", function()
+  it("pips the buffer's state over a write over the diff's state", function()
     local rows = {
+      row({ seq = 4, parent = 3 }),
+      row({ seq = 3, parent = 2, save = 1 }),
+      row({ seq = 2, parent = 1 }),
+      row({ seq = 1, parent = 0, save = 1 }),
+      original(),
+    }
+    local display = history.display(rows, { width = 30, buffer = 4, current = 3 })
+
+    assert.matches("^@ ", display.lines[1])
+    assert.matches("^w ", display.lines[2])
+    assert.matches("^│ ", display.lines[3])
+    assert.matches("^w ", display.lines[4])
+
+    local on_diff = history.display(rows, { width = 30, buffer = 4, current = 2 })
+    assert.matches("^○ ", on_diff.lines[3])
+
+    local same = history.display(rows, { width = 30, buffer = 3, current = 3 })
+    assert.matches("^@ ", same.lines[2])
+  end)
+
+  it("draws the configured glyphs", function()
+    local rows = {
+      row({ seq = 3, parent = 2 }),
       row({ seq = 2, parent = 1, save = 1 }),
       row({ seq = 1, parent = 0 }),
+      original(),
     }
-    local display = history.display(rows, { current = 2, width = 30 })
+    local glyphs = { buffer = "B", diff = "D", write = "ⓦ", gap = ":", ellipsis = "~" }
+    local display = history.display(rows, { width = 30, buffer = 3, current = 1, glyphs = glyphs })
 
-    assert.matches("^◉", display.lines[1])
-    assert.matches("^│", display.lines[2])
+    assert.matches("^B ", display.lines[1])
+    assert.matches("^ⓦ ", display.lines[2])
+    assert.matches("^D ", display.lines[3])
   end)
 
-  it("caps a branch lane with junctions and leaves the parent plain", function()
+  it("highlights the buffer's and the diff's rows", function()
+    local rows = { row({ seq = 2, parent = 1 }), row({ seq = 1, parent = 0 }), original() }
+    local display = history.display(rows, { width = 30, buffer = 2, current = 1 })
+
+    local lines_hl = {}
+    for _, span in ipairs(display.spans) do
+      if span.col_start == 0 then
+        lines_hl[span.line] = span.hl
+      end
+    end
+    assert.are.equal("DiffundoBuffer", lines_hl[0])
+    assert.are.equal("DiffundoDiff", lines_hl[1])
+  end)
+
+  it("caps a branch lane with junctions and puts a pip in the cap", function()
     local rows = {
       row({ seq = 4, parent = 2 }),
       row({ seq = 3, parent = 2 }),
       row({ seq = 2, parent = 1 }),
       row({ seq = 1, parent = 0 }),
+      original(),
     }
-    local display = history.display(rows, { width = 30 })
 
-    assert.matches("^│", display.lines[1])
-    assert.matches("^├┘", display.lines[2])
-    assert.matches("^│", display.lines[3])
-    assert.matches("^│", display.lines[4])
+    local plain = history.display(rows, { width = 30 })
+    assert.matches("^│ ", plain.lines[1])
+    assert.matches("^├┘", plain.lines[2])
+    assert.matches("^│ ", plain.lines[3])
+
+    local current = history.display(rows, { width = 30, current = 3 })
+    assert.matches("^├○", current.lines[2])
   end)
 
   it("keeps the trunk lane when branches alternate", function()
@@ -275,9 +370,6 @@ describe("history.display", function()
     assert.matches("^┊│", display.lines[3])
     assert.matches("^├┘", display.lines[4])
     assert.matches("^│", display.lines[5])
-    assert.matches("^│", display.lines[6])
-    assert.matches("^│", display.lines[7])
-    assert.matches("^│", display.lines[8])
   end)
 
   it("nests an alternate of an alternate to a third lane with pass-through", function()
@@ -317,7 +409,7 @@ describe("history.display", function()
     assert.matches("^│", display.lines[5])
   end)
 
-  it("renders a saved alternate with the ● glyph", function()
+  it("renders a written alternate with the write pip", function()
     local rows = {
       row({ seq = 9, parent = 5 }),
       row({ seq = 8, parent = 7 }),
@@ -332,21 +424,22 @@ describe("history.display", function()
     local display = history.display(rows, { width = 30, fold_min = 9 })
 
     assert.matches("^├┘", display.lines[2])
-    assert.matches("^┊●", display.lines[3])
+    assert.matches("^┊w", display.lines[3])
     assert.matches("^├┘", display.lines[4])
   end)
 
-  it("folds a long branch stretch and keeps the caption out of the buffer", function()
+  it("folds a long branch stretch with a gap caption counting its writes", function()
     local rows = {
       row({ seq = 9, parent = 2 }),
       row({ seq = 8, parent = 7 }),
       row({ seq = 7, parent = 6 }),
-      row({ seq = 6, parent = 5 }),
+      row({ seq = 6, parent = 5, save = 1 }),
       row({ seq = 5, parent = 4 }),
       row({ seq = 4, parent = 3 }),
       row({ seq = 3, parent = 2 }),
       row({ seq = 2, parent = 1 }),
       row({ seq = 1, parent = 0 }),
+      original(),
     }
     local display = history.display(rows, { width = 40, fold_min = 3 })
 
@@ -355,97 +448,17 @@ describe("history.display", function()
     assert.matches("^┊│ %+0 lines", display.lines[3])
     assert.matches("^├┘", display.lines[7])
     assert.are.same({ { start = 3, stop = 6 } }, display.folds)
-    assert.are.same({ [3] = "+4 states: +0 -0 lines 4 undos" }, display.captions)
-    assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9 }, display.row_to_line)
+    assert.are.same({ [3] = "┆    4 undos 1w" }, display.captions)
+    assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, display.row_to_line)
   end)
 
-  it("appends the footer below the rows", function()
-    local rows = { row({ seq = 2, parent = 1 }), row({ seq = 1, parent = 0 }) }
-    local display = history.display(rows, { width = 30, selected = 1, total = 4 })
+  it("renders an empty view as no lines", function()
+    local display = history.display({}, { width = 30 })
 
-    assert.are.equal(3, display.footer_start)
-    assert.matches("^#2", display.lines[3])
-    assert.matches("2/4", display.lines[4])
-    assert.matches("help: g%?$", display.lines[4])
-    assert.are.equal(4, #display.lines)
+    assert.are.same({}, display.lines)
   end)
 
-  it("pads rows so the footer is the last two lines of opts.height", function()
-    local rows = { row({ seq = 2, parent = 1 }), row({ seq = 1, parent = 0 }) }
-    local display = history.display(rows, { width = 30, height = 8, selected = 1, total = 4 })
-
-    assert.are.equal(8, #display.lines)
-    assert.are.equal(7, display.footer_start)
-    assert.matches("^#2", display.lines[7])
-    assert.matches("2/4", display.lines[8])
-    assert.matches("help: g%?$", display.lines[8])
-  end)
-
-  it("renders an empty view with a no-matches footer", function()
-    local display = history.display({}, { width = 30, total = 4 })
-
-    assert.are.equal(1, display.footer_start)
-    assert.matches("no matches", display.lines[1])
-    assert.matches("0/4", display.lines[2])
-    assert.matches("help: g%?$", display.lines[2])
-    assert.are.equal(2, #display.lines)
-  end)
-
-  it("never maps the sentinel row to a buffer line", function()
-    local rows = {
-      row({ seq = 2, parent = 1, added = { "x" } }),
-      row({ seq = 1, parent = 0 }),
-      { seq = 0, time = 0, save = nil, added = {}, removed = {}, parent = 0, label = "" },
-    }
-    local display = history.display(rows, { width = 30, total = 3 })
-
-    assert.are.same({ 1, 2 }, display.row_to_line)
-    assert.matches("2/3", display.lines[4])
-    assert.are.equal(4, #display.lines)
-  end)
-
-  it("folds a branch stretch without counting the older sentinel", function()
-    local rows = {
-      row({ seq = 9, parent = 2 }),
-      row({ seq = 8, parent = 7 }),
-      row({ seq = 7, parent = 6 }),
-      row({ seq = 6, parent = 5 }),
-      row({ seq = 5, parent = 4 }),
-      row({ seq = 4, parent = 3 }),
-      row({ seq = 3, parent = 2 }),
-      row({ seq = 2, parent = 1 }),
-      row({ seq = 1, parent = 0 }),
-      { seq = 0, time = 0, save = nil, added = {}, removed = {}, parent = 0, label = "" },
-    }
-    local display = history.display(rows, { width = 40, fold_min = 3, total = 10 })
-
-    assert.are.same({ { start = 3, stop = 6 } }, display.folds)
-    assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9 }, display.row_to_line)
-    assert.matches("9/10", display.lines[#display.lines])
-  end)
-
-  it("shows the current saved state and change totals in the footer", function()
-    local rows = {
-      row({ seq = 3, parent = 2, added = { "x" }, save = 1 }),
-      row({ seq = 2, parent = 1 }),
-      row({ seq = 1, parent = 0 }),
-    }
-    local display = history.display(rows, { width = 60, current = 3, selected = 1 })
-
-    assert.matches("^#3", display.lines[#display.lines - 1])
-    assert.matches("◉ saved", display.lines[#display.lines - 1])
-    assert.matches("%+1 %-0$", display.lines[#display.lines - 1])
-  end)
-
-  it("shows ○ for the plain current state in the footer", function()
-    local rows = { row({ seq = 2, parent = 1 }), row({ seq = 1, parent = 0 }) }
-    local display = history.display(rows, { width = 60, current = 2, selected = 1 })
-
-    assert.matches("^#2 ○ ", display.lines[#display.lines - 1])
-    assert.not_matches("saved", display.lines[#display.lines - 1])
-  end)
-
-  it("truncates an overflowing preview by cells and keeps the time on the line", function()
+  it("truncates an overflowing preview with the ellipsis and keeps the number", function()
     local rows = {
       row({ seq = 4, parent = 2, added = { "a very long added line that just keeps going" } }),
       row({ seq = 3, parent = 2 }),
@@ -454,30 +467,134 @@ describe("history.display", function()
     }
     local display = history.display(rows, { width = 14 })
 
-    assert.matches("… 2m %- 4$", display.lines[1])
+    assert.are.equal("│  + a ver… #4", display.lines[1])
     for _, line in ipairs(display.lines) do
-      assert.is_true(cell_width(line) <= 14, ("line out of width: %q"):format(line))
+      assert.are.equal(14, cell_width(line))
     end
     for _, span in ipairs(display.spans) do
       assert.is_true(span.line ~= 0, "truncated row must not keep its marks")
     end
-    assert.matches("^├┘", display.lines[2])
+  end)
+end)
+
+describe("history.display collapsed", function()
+  ---@return diffundo.Row[]
+  local function linear()
+    local rows = {}
+    for seq = 12, 1, -1 do
+      rows[#rows + 1] = row({ seq = seq, parent = seq - 1, added = { "line " .. seq } })
+    end
+    rows[#rows + 1] = original()
+    return rows
+  end
+
+  it("shows only the kept rows with gap rows between them", function()
+    local rows = linear()
+    rows[5].save = 1
+    local display = history.display(rows, {
+      width = 34,
+      buffer = 12,
+      current = 4,
+      keep = { [12] = true, [4] = true },
+    })
+
+    assert.are.same({
+      "@ + line 12                    #12",
+      "┆   7 undos 1w",
+      "○ + line 4                      #4",
+      "┆   3 undos",
+    }, display.lines)
+    assert.are.same({ [1] = 1, [9] = 3 }, display.row_to_line)
+    assert.are.same({}, display.folds)
   end)
 
-  it("truncates a long status line in the footer by cells", function()
-    local rows = { row({ seq = 2, parent = 1, added = { "one" }, removed = { "two", "three" } }) }
-    local display = history.display(rows, { width = 18, selected = 1, current = 2 })
+  it("counts the states above the top row when the buffer is mid-undo", function()
+    local display = history.display(linear(), {
+      width = 34,
+      buffer = 10,
+      current = 9,
+      keep = { [10] = true, [9] = true },
+    })
 
-    assert.matches("^#2 ", display.lines[#display.lines - 1])
-    assert.matches("…$", display.lines[#display.lines - 1])
-    assert.matches("help: g%?$", display.lines[#display.lines])
+    assert.are.same({
+      "┆   2 undos",
+      "@ + line 10                    #10",
+      "○ + line 9                      #9",
+      "┆   8 undos",
+    }, display.lines)
+  end)
+
+  it("shows #0 without a gap below it", function()
+    local display = history.display(linear(), {
+      width = 34,
+      buffer = 12,
+      current = 0,
+      keep = { [12] = true, [0] = true },
+    })
+
+    assert.are.same({
+      "@ + line 12                    #12",
+      "┆   11 undos",
+      "○                               #0",
+    }, display.lines)
+  end)
+
+  it("shows one row when the diff equals the buffer", function()
+    local display = history.display(linear(), {
+      width = 34,
+      buffer = 12,
+      current = 12,
+      keep = { [12] = true },
+    })
+
+    assert.are.same({ "@ + line 12                    #12", "┆   11 undos" }, display.lines)
+  end)
+
+  it("keeps the kept rows' lanes and pads the gaps to the widest kept gutter", function()
+    local rows = {
+      row({ seq = 4, parent = 1, added = { "x" } }),
+      row({ seq = 3, parent = 2, added = { "c" } }),
+      row({ seq = 2, parent = 1, added = { "b" } }),
+      row({ seq = 1, parent = 0, added = { "a" } }),
+      original(),
+    }
+    local display = history.display(rows, {
+      width = 30,
+      buffer = 4,
+      current = 3,
+      keep = { [4] = true, [3] = true },
+    })
+
+    assert.are.same({
+      "@  + x                      #4",
+      "├○ + c                      #3",
+      "┆    2 undos",
+    }, display.lines)
+  end)
+
+  it("greys out the gap rows", function()
+    local display = history.display(linear(), {
+      width = 34,
+      buffer = 12,
+      current = 4,
+      keep = { [12] = true, [4] = true },
+    })
+
+    local gap
+    for _, span in ipairs(display.spans) do
+      if span.line == 1 then
+        gap = span
+      end
+    end
+    assert.are.equal("DiffundoGap", gap.hl)
+    assert.are.equal(#display.lines[2], gap.col_end)
   end)
 end)
 
 describe("history.display with the us.txt tree", function()
   local day = 86400
   local width = 50
-  local time_w = 8
+  local seq_w = 3
   local tree_w = 2
   local t2, t3
 
@@ -544,16 +661,16 @@ describe("history.display with the us.txt tree", function()
 
   ---@param gutter string
   ---@param preview string
-  ---@param label string
+  ---@param seq integer
   ---@return string
-  local function rendered(gutter, preview, label)
-    local body = width - tree_w - 1 - time_w
+  local function rendered(gutter, preview, seq)
+    local number = "#" .. seq
+    local body = width - tree_w - 1 - seq_w - 1
     return gutter
       .. string.rep(" ", tree_w - cells(gutter) + 1)
       .. preview
-      .. string.rep(" ", math.max(0, body - cells(preview)))
-      .. string.rep(" ", math.max(0, time_w - #label))
-      .. label
+      .. string.rep(" ", body - cells(preview) + 1 + seq_w - #number)
+      .. number
   end
 
   it("walks all 20 states newest first with the us.txt parents", function()
@@ -567,9 +684,12 @@ describe("history.display with the us.txt tree", function()
       parents[i] = r.parent
     end
 
-    assert.are.same({ 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 }, seqs)
     assert.are.same(
-      { 18, 18, 17, 4, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+      { 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+      seqs
+    )
+    assert.are.same(
+      { 18, 18, 17, 4, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0 },
       parents
     )
     assert.are.equal(1, rows[15].save)
@@ -587,33 +707,34 @@ describe("history.display with the us.txt tree", function()
     local display = history.display(rows, { width = width, current = 20 })
 
     local expected = {
-      rendered("○", "+1 -1 lines", "2d - 20"),
-      rendered("├┘", "+0 lines", "2d - 19"),
-      rendered("│", "+0 lines", "2d - 18"),
-      rendered("│", "+1 -1 lines", "2d - 17"),
-      rendered("├┘", "+1 -1 lines", "3d - 16"),
-      rendered("┊│", "+1 -1 lines", "3d - 15"),
-      rendered("┊│", "- one", "3d - 14"),
-      rendered("┊│", "- two", "3d - 13"),
-      rendered("┊│", "- three", "3d - 12"),
-      rendered("┊│", "- six", "3d - 11"),
-      rendered("┊│", "- seven", "3d - 10"),
-      rendered("┊│", "- eight", "3d - 9"),
-      rendered("┊│", "- 7", "3d - 8"),
-      rendered("┊│", "- 8", "3d - 7"),
-      rendered("┊●", "- 9", "3d - 6"),
-      rendered("├┘", "- 10", "3d - 5"),
-      rendered("●", "-2 lines", "3d - 4"),
-      rendered("│", "+5 -2 lines", "3d - 3"),
-      rendered("│", "+5 -5 lines", "3d - 2"),
-      rendered("│", "+10 lines", "3d - 1"),
+      rendered("○", "+1 -1 lines", 20),
+      rendered("├┘", "+0 lines", 19),
+      rendered("│", "+0 lines", 18),
+      rendered("│", "+1 -1 lines", 17),
+      rendered("├┘", "+1 -1 lines", 16),
+      rendered("┊│", "+1 -1 lines", 15),
+      rendered("┊│", "- one", 14),
+      rendered("┊│", "- two", 13),
+      rendered("┊│", "- three", 12),
+      rendered("┊│", "- six", 11),
+      rendered("┊│", "- seven", 10),
+      rendered("┊│", "- eight", 9),
+      rendered("┊│", "- 7", 8),
+      rendered("┊│", "- 8", 7),
+      rendered("┊w", "- 9", 6),
+      rendered("├┘", "- 10", 5),
+      rendered("w", "-2 lines", 4),
+      rendered("│", "+5 -2 lines", 3),
+      rendered("│", "+5 -5 lines", 2),
+      rendered("│", "+10 lines", 1),
     }
 
     for i, line in ipairs(expected) do
       assert.are.equal(line, display.lines[i])
       assert.are.equal(width, cells(display.lines[i]))
     end
-    assert.are.equal(22, #display.lines)
+    assert.are.equal(21, #display.lines)
+    assert.matches("^│ +#0$", display.lines[21])
   end)
 
   it("folds rows 15 through 6 with the caption served as foldtext", function()
@@ -622,22 +743,18 @@ describe("history.display with the us.txt tree", function()
     local display = history.display(rows, { width = width, current = 20 })
 
     assert.are.same({ { start = 6, stop = 15 } }, display.folds)
-    assert.are.same({ [6] = "+10 states: +1 -10 lines 10 undos" }, display.captions)
+    assert.are.same({ [6] = "┆    10 undos 1w" }, display.captions)
     assert.are.same(
-      { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 },
+      { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 },
       display.row_to_line
     )
-    assert.are.equal(21, display.footer_start)
-    assert.matches("^#20", display.lines[21])
-    assert.matches("20/20", display.lines[22])
-    assert.matches("help: g%?$", display.lines[22])
   end)
 end)
 
 describe("history.display with sibling branches", function()
   local day = 86400
   local width = 40
-  local time_w = 8
+  local seq_w = 3
   local tree_w = 2
   local t2, t3
 
@@ -802,16 +919,16 @@ describe("history.display with sibling branches", function()
 
   ---@param gutter string
   ---@param preview string
-  ---@param label string
+  ---@param seq integer
   ---@return string
-  local function rendered(gutter, preview, label)
-    local body = width - tree_w - 1 - time_w
+  local function rendered(gutter, preview, seq)
+    local number = "#" .. seq
+    local body = width - tree_w - 1 - seq_w - 1
     return gutter
       .. string.rep(" ", tree_w - cells(gutter) + 1)
       .. preview
-      .. string.rep(" ", math.max(0, body - cells(preview)))
-      .. string.rep(" ", math.max(0, time_w - #label))
-      .. label
+      .. string.rep(" ", body - cells(preview) + 1 + seq_w - #number)
+      .. number
   end
 
   it("renders the sidebar session with shared lanes and the current marker", function()
@@ -820,33 +937,34 @@ describe("history.display with sibling branches", function()
     local display = history.display(rows, { width = width, current = 18 })
 
     local expected = {
-      rendered("│", "+1 -1 lines", "2d - 20"),
-      rendered("├┘", "+0 lines", "2d - 19"),
-      rendered("◉", "+0 lines", "2d - 18"),
-      rendered("│", "+1 -1 lines", "2d - 17"),
-      rendered("├┘", "+1 -1 lines", "3d - 16"),
-      rendered("┊│", "- 2 15 things that are", "3d - 15"),
-      rendered("┊│", "- B", "3d - 14"),
-      rendered("┊│", "- 2 15 things that are", "3d - 13"),
-      rendered("┊│", "- G", "3d - 12"),
-      rendered("┊│", "- 7", "3d - 11"),
-      rendered("┊│", "- 8", "3d - 10"),
-      rendered("┊│", "- 9", "3d - 9"),
-      rendered("┊│", "- 1 15 things that are", "3d - 8"),
-      rendered("┊●", "- 10", "3d - 7"),
-      rendered("┊│", "- 11", "3d - 6"),
-      rendered("├┘", "-2 lines", "3d - 5"),
-      rendered("●", "+5 -2 lines", "3d - 4"),
-      rendered("│", "+5 -5 lines", "3d - 3"),
-      rendered("●", "+10 lines", "3d - 2"),
-      rendered("●", "+1 -1 lines", "3d - 1"),
+      rendered("│", "+1 -1 lines", 20),
+      rendered("├┘", "+0 lines", 19),
+      rendered("w", "+0 lines", 18),
+      rendered("│", "+1 -1 lines", 17),
+      rendered("├┘", "+1 -1 lines", 16),
+      rendered("┊│", "- 2 15 things that are", 15),
+      rendered("┊│", "- B", 14),
+      rendered("┊│", "- 2 15 things that are", 13),
+      rendered("┊│", "- G", 12),
+      rendered("┊│", "- 7", 11),
+      rendered("┊│", "- 8", 10),
+      rendered("┊│", "- 9", 9),
+      rendered("┊│", "- 1 15 things that are", 8),
+      rendered("┊w", "- 10", 7),
+      rendered("┊│", "- 11", 6),
+      rendered("├┘", "-2 lines", 5),
+      rendered("w", "+5 -2 lines", 4),
+      rendered("│", "+5 -5 lines", 3),
+      rendered("w", "+10 lines", 2),
+      rendered("w", "+1 -1 lines", 1),
     }
 
     for i, line in ipairs(expected) do
       assert.are.equal(line, display.lines[i])
       assert.are.equal(width, cells(display.lines[i]))
     end
-    assert.are.equal(22, #display.lines)
+    assert.are.equal(21, #display.lines)
+    assert.matches("^│ +#0$", display.lines[21])
   end)
 
   it("folds rows 14 through 6 and keeps the caps outside", function()
@@ -855,12 +973,11 @@ describe("history.display with sibling branches", function()
     local display = history.display(rows, { width = width, current = 18 })
 
     assert.are.same({ { start = 7, stop = 15 } }, display.folds)
-    assert.are.same({ [7] = "+9 states: +0 -9 lines 9 undos" }, display.captions)
+    assert.are.same({ [7] = "┆    9 undos 1w" }, display.captions)
     assert.are.same(
-      { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 },
+      { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 },
       display.row_to_line
     )
-    assert.are.equal(21, display.footer_start)
   end)
 end)
 
@@ -876,8 +993,8 @@ describe("history.rows mirrors real neovim undo trees", function()
       seqs[i] = r.seq
       parents[i] = r.parent
     end
-    assert.are.same({ 4, 3, 2, 1 }, seqs)
-    assert.are.same({ 1, 2, 1, 0 }, parents)
+    assert.are.same({ 4, 3, 2, 1, 0 }, seqs)
+    assert.are.same({ 1, 2, 1, 0, 0 }, parents)
     assert.are.same({ "x" }, rows[1].added)
     assert.are.same({ "a" }, rows[4].added)
     assert.are.same({ "" }, rows[4].removed)
@@ -895,8 +1012,8 @@ describe("history.rows mirrors real neovim undo trees", function()
       seqs[i] = r.seq
       parents[i] = r.parent
     end
-    assert.are.same({ 5, 4, 3, 2, 1 }, seqs)
-    assert.are.same({ 1, 1, 2, 1, 0 }, parents)
+    assert.are.same({ 5, 4, 3, 2, 1, 0 }, seqs)
+    assert.are.same({ 1, 1, 2, 1, 0, 0 }, parents)
     assert.are.same({ "y" }, rows[1].added)
     assert.are.same({ "x" }, rows[2].added)
   end)
@@ -927,27 +1044,19 @@ describe("history.rows mirrors real neovim undo trees", function()
       seqs[i] = r.seq
       parents[i] = r.parent
     end
-    assert.are.same({ 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 }, seqs)
-    assert.are.same({ 13, 12, 11, 10, 9, 8, 1, 6, 5, 4, 3, 2, 1, 0 }, parents)
+    assert.are.same({ 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 }, seqs)
+    assert.are.same({ 13, 12, 11, 10, 9, 8, 1, 6, 5, 4, 3, 2, 1, 0, 0 }, parents)
   end)
 end)
 
 describe("history.display with real neovim undo shapes", function()
-  local function row(over)
-    local base = { seq = 4, time = os.time() - 1, save = nil, added = {}, removed = {}, parent = 3 }
-    for key, value in pairs(over or {}) do
-      base[key] = value
-    end
-    return base
-  end
-
   ---@param display diffundo.Display
   ---@param expected string[]
   local function assert_tree_lines(display, expected)
     for i, line in ipairs(expected) do
       assert.are.equal(line, display.lines[i])
     end
-    assert.are.equal(#expected + 2, #display.lines)
+    assert.are.equal(#expected, #display.lines)
   end
 
   it("renders a real branch off the middle with junctions", function()
@@ -960,10 +1069,10 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 4 })
 
     assert_tree_lines(display, {
-      "○  + x                           now - 4",
-      "├┘ + c                           now - 3",
-      "├┘ + b                           now - 2",
-      "│  +1 -1 lines                   now - 1",
+      "○  + x                                #4",
+      "├┘ + c                                #3",
+      "├┘ + b                                #2",
+      "│  +1 -1 lines                        #1",
     })
   end)
 
@@ -978,11 +1087,11 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 5 })
 
     assert_tree_lines(display, {
-      "○  + y                           now - 5",
-      "├┘ + x                           now - 4",
-      "┊│ + c                           now - 3",
-      "├┘ + b                           now - 2",
-      "│  +1 -1 lines                   now - 1",
+      "○  + y                                #5",
+      "├┘ + x                                #4",
+      "┊│ + c                                #3",
+      "├┘ + b                                #2",
+      "│  +1 -1 lines                        #1",
     })
   end)
 
@@ -994,12 +1103,12 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 2 })
 
     assert_tree_lines(display, {
-      "○ +1 -1 lines                    now - 2",
-      "│ +1 -1 lines                    now - 1",
+      "○ +1 -1 lines                         #2",
+      "│ +1 -1 lines                         #1",
     })
   end)
 
-  it("marks the saved state in a real saved branch", function()
+  it("puts the write pip in the junction caps of a real saved branch", function()
     local rows = {
       row({ seq = 4, parent = 1, added = { "x" } }),
       row({ seq = 3, parent = 2, added = { "c" }, save = 3 }),
@@ -1009,10 +1118,10 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 4 })
 
     assert_tree_lines(display, {
-      "○  + x                           now - 4",
-      "├┘ + c                           now - 3",
-      "├┘ + b                           now - 2",
-      "●  +1 -1 lines                   now - 1",
+      "○  + x                                #4",
+      "├w + c                                #3",
+      "├w + b                                #2",
+      "w  +1 -1 lines                        #1",
     })
   end)
 
@@ -1037,8 +1146,6 @@ describe("history.display with real neovim undo shapes", function()
 
     assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }, display.row_to_line)
     assert.are.same({ { start = 9, stop = 12 } }, display.folds)
-    assert.are.same({ [9] = "+4 states: +4 -0 lines 4 undos" }, display.captions)
-    assert.matches("^#14 ○ ", display.lines[#display.lines - 1])
-    assert.matches("14/14", display.lines[#display.lines])
+    assert.are.same({ [9] = "┆    4 undos" }, display.captions)
   end)
 end)

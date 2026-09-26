@@ -12,32 +12,30 @@ local function scrub_options(win)
   end)
 end
 
----@param opts { lines: string[], width: integer, height?: integer, row?: integer, enter?: boolean }
+---@param config table
+---@param enter boolean
 ---@return integer
-function M.open(opts)
+function M.open(config, enter)
   local buf = vim.api.nvim_create_buf(false, true)
-  local win = vim.api.nvim_open_win(buf, opts.enter ~= false, {
-    relative = "editor",
-    row = opts.row or 0,
-    col = math.max(0, vim.o.columns - opts.width),
-    width = opts.width,
-    height = math.max(2, math.min(opts.height or #opts.lines, vim.o.lines - 4)),
-  })
+  local win = vim.api.nvim_open_win(buf, enter, config)
   scrub_options(win)
-  vim.bo.buftype = "nofile"
-  vim.bo.bufhidden = "wipe"
-  vim.bo.swapfile = false
-  M.render(win, opts.lines)
+  vim.api.nvim_buf_call(buf, function()
+    vim.bo.buftype = "nofile"
+    vim.bo.bufhidden = "wipe"
+    vim.bo.swapfile = false
+  end)
   return win
 end
 
 ---@param win integer
 ---@param lines string[]
----@param opts { height?: integer }|nil
-function M.render(win, lines, opts)
-  vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, lines)
-  local height = opts and opts.height or math.max(2, math.min(#lines, vim.o.lines - 4))
-  vim.api.nvim_win_set_config(win, { height = height })
+function M.render(win, lines)
+  local buf = vim.api.nvim_win_get_buf(win)
+  vim.api.nvim_buf_call(buf, function()
+    vim.bo.modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo.modifiable = false
+  end)
 end
 
 ---@param win integer

@@ -78,6 +78,15 @@ describe("walker.steps", function()
     assert.are.same({ "silent undo 2", "silent undo 3" }, vim.commands)
   end)
 
+  it("stops at the floor without walking the state below it", function()
+    local iterator = walker.steps(4, 2)
+
+    assert.are.equal(3, iterator().seq)
+    vim.commands = {}
+    assert.is_nil(iterator())
+    assert.are.same({}, vim.commands)
+  end)
+
   it("passes save through", function()
     vim.history:branch(3, { "a", "b", "c", "d" }, { save = 2 })
 

@@ -1,6 +1,8 @@
 local fakevim = require("spec.fakevim")
 local window = require("diffundo.window")
 
+local config = { relative = "win", win = 1000, row = 3, col = 40, width = 20, height = 2 }
+
 describe("window.open", function()
   local vim
 
@@ -9,21 +11,21 @@ describe("window.open", function()
     vim:install()
   end)
 
-  it("creates a focused float in the upper right with no winbar", function()
-    local win = window.open({ lines = { "one", "two" }, width = 40 })
+  it("opens a float with the given config and leaves focus alone", function()
+    local win = window.open(config, false)
+
+    assert.are_not.equal(win, vim.current_win)
+    assert.are.same(config, vim.windows[win].config)
+  end)
+
+  it("focuses the float when asked to", function()
+    local win = window.open(config, true)
 
     assert.are.equal(win, vim.current_win)
-    local config = vim.windows[win].config
-    assert.are.equal("editor", config.relative)
-    assert.are.equal(0, config.row)
-    assert.are.equal(40, config.col)
-    assert.are.equal(40, config.width)
-    assert.are.equal(2, config.height)
-    assert.is_nil(vim.windows[win].options.winbar)
   end)
 
   it("turns off inherited padding columns and wrapping", function()
-    local win = window.open({ lines = { "one" }, width = 40 })
+    local win = window.open(config, false)
     local options = vim.windows[win].options
 
     assert.are.equal("no", options.signcolumn)
@@ -34,62 +36,13 @@ describe("window.open", function()
     assert.is_false(options.wrap)
   end)
 
-  it("clamps the column to the editor width", function()
-    vim.o.columns = 30
-    local win = window.open({ lines = { "one" }, width = 40 })
-
-    assert.are.equal(0, vim.windows[win].config.col)
-  end)
-
-  it("configures a scratch buffer and fills the lines", function()
-    local win = window.open({ lines = { "one", "two" }, width = 40 })
+  it("configures a scratch buffer", function()
+    local win = window.open(config, false)
     local buffer = vim.buffers[vim.windows[win].buf]
 
     assert.are.equal("nofile", buffer.options.buftype)
     assert.are.equal("wipe", buffer.options.bufhidden)
-    assert.are.same({ "one", "two" }, buffer.lines)
-  end)
-
-  it("honors opts.height for the drawn lines", function()
-    local lines = {}
-    for index = 1, 8 do
-      lines[index] = "row " .. index
-    end
-    local win = window.open({ lines = lines, height = 8, width = 40 })
-
-    assert.are.equal(8, vim.windows[win].config.height)
-  end)
-
-  it("caps the height at the terminal", function()
-    vim.o.lines = 5
-    local win = window.open({ lines = { "a", "b", "c" }, width = 40 })
-
-    assert.are.equal(2, vim.windows[win].config.height)
-  end)
-
-  it("caps opts.height at the terminal", function()
-    vim.o.lines = 10
-    local lines = {}
-    for index = 1, 36 do
-      lines[index] = "row " .. index
-    end
-    local win = window.open({ lines = lines, height = 36, width = 40 })
-
-    assert.are.equal(6, vim.windows[win].config.height)
-  end)
-
-  it("defaults to row 0 and focuses the float", function()
-    local win = window.open({ lines = { "one" }, width = 40 })
-
-    assert.are.equal(0, vim.windows[win].config.row)
-    assert.are.equal(win, vim.current_win)
-  end)
-
-  it("honors row and leaves the current window alone with enter=false", function()
-    local win = window.open({ lines = { "one" }, width = 40, row = 5, enter = false })
-
-    assert.are.equal(5, vim.windows[win].config.row)
-    assert.are_not.equal(win, vim.current_win)
+    assert.is_false(buffer.options.swapfile)
   end)
 end)
 
@@ -101,43 +54,23 @@ describe("window.render and window.map", function()
     vim:install()
   end)
 
-  it("replaces lines and re-heights", function()
-    local win = window.open({ lines = { "one" }, width = 40 })
+  it("replaces the lines and leaves the buffer unmodifiable", function()
+    local win = window.open(config, false)
 
     window.render(win, { "one", "two", "three" })
 
-    assert.are.same({ "one", "two", "three" }, vim.buffers[vim.windows[win].buf].lines)
-    assert.are.equal(3, vim.windows[win].config.height)
-  end)
-
-  it("keeps opts.height when rendering", function()
-    local win = window.open({ lines = { "one" }, width = 40 })
-
-    window.render(win, { "one", "two" }, { height = 8 })
-
-    assert.are.equal(8, vim.windows[win].config.height)
-  end)
-
-  it("does not shrink below opts.height when lines exceed it", function()
-    local win = window.open({ lines = { "one" }, width = 40 })
-    local lines = {}
-    for index = 1, 10 do
-      lines[index] = "row " .. index
-    end
-
-    window.render(win, lines, { height = 8 })
-
-    assert.are.equal(8, vim.windows[win].config.height)
+    local buffer = vim.buffers[vim.windows[win].buf]
+    assert.are.same({ "one", "two", "three" }, buffer.lines)
+    assert.is_false(buffer.options.modifiable)
   end)
 
   it("binds a normal-mode keymap to the buffer", function()
-    local win = window.open({ lines = { "one" }, width = 40 })
+    local win = window.open(config, true)
     local called = false
 
     window.map(win, "q", function()
       called = true
     end)
-    vim.current_win = win
     vim:press("q")
 
     assert.is_true(called)
@@ -149,13 +82,14 @@ describe("window.close and window.is_open", function()
     local vim = fakevim.new(fakevim.history({ {}, { "a" } }))
     vim:install()
 
-    local win = window.open({ lines = { "one" }, width = 40 })
+    local win = window.open(config, false)
     local buf = vim.windows[win].buf
 
     window.close(win)
 
     assert.is_false(window.is_open(win))
     assert.is_nil(vim.buffers[buf])
+    assert.is_false(window.is_open(nil))
   end)
 end)
 
@@ -163,13 +97,13 @@ describe("fake: highlight and fold APIs", function()
   it("reports a float's config from the api", function()
     local vim = fakevim.new(fakevim.history({ {}, { "a" } }))
     vim:install()
-    local win = window.open({ lines = { "one" }, width = 40, row = 3 })
+    local win = window.open(config, false)
 
-    local config = vim.api.nvim_win_get_config(win)
+    local reported = vim.api.nvim_win_get_config(win)
 
-    assert.are.equal(3, config.row)
-    assert.are.equal(40, config.width)
-    assert.are.equal("editor", config.relative)
+    assert.are.equal(3, reported.row)
+    assert.are.equal(20, reported.width)
+    assert.are.equal("win", reported.relative)
   end)
 
   it("records highlights and clears the namespace", function()

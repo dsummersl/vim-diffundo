@@ -50,7 +50,7 @@ function M.place(lines, undonr)
   vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
   vim.bo.readonly = true
   vim.t.diffundo_diff_undonr = undonr
-  label.apply(label.for_undonr(undonr))
+  label.apply(label.name(undonr))
 end
 
 local function new_buffer()
@@ -69,7 +69,7 @@ local function new_buffer()
   vim.wo.cursorbind = true
   vim.wo.foldmethod = "diff"
   vim.bo.readonly = true
-  label.apply(label.for_undonr(undonr))
+  label.apply(label.name(undonr))
 
   M.focus(true)
 end
@@ -95,11 +95,6 @@ function M.open()
   end
 
   leave_stale_diff_window()
-
-  if vim.fn.undotree().seq_last == 0 then
-    vim.notify("No changes to view!")
-    return false
-  end
 
   vim.t.diffundo_source_bn = vim.api.nvim_get_current_buf()
   vim.cmd("vert diffsplit")

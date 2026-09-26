@@ -20,53 +20,59 @@ describe("label.find_entry", function()
   end)
 end)
 
-describe("label.for_undonr", function()
+describe("label.name", function()
+  it("names the diff buffer after the source buffer and the undo number", function()
+    local vim = fakevim.new(fakevim.history({ {}, { "first" } }))
+    vim:install()
+    vim.t.diffundo_source_bn = 7
+
+    assert.are.equal("diffundo://7/#3", label.name(3))
+  end)
+end)
+
+describe("label.date and label.title", function()
+  local vim
+
   before_each(function()
-    local history = fakevim.history({ {}, { "first" }, { "first", "second" } })
-    history.undotree = function()
-      return { entries = entries }
+    vim = fakevim.new(fakevim.history({ {}, { "first" } }))
+    vim:install()
+  end)
+
+  it("formats with the default date format", function()
+    assert.are.equal(os.date("%Y-%m-%d %H:%M:%S", 1627784719), label.date(1627784719))
+  end)
+
+  it("uses g:diffundo_date_format when it is a strftime string", function()
+    vim.g.diffundo_date_format = "%H:%M"
+
+    assert.are.equal(os.date("%H:%M", 1627784719), label.date(1627784719))
+  end)
+
+  it("calls g:diffundo_date_format when it is a function", function()
+    vim.g.diffundo_date_format = function(time)
+      return "at " .. time
     end
-    fakevim.new(history):install()
+
+    assert.are.equal("at 5", label.date(5))
   end)
 
-  it("labels the original state", function()
-    assert.are.equal("{original} - 0", label.for_undonr(0))
-  end)
+  it("titles a state with its number and date, and #0 with its number alone", function()
+    vim.g.diffundo_date_format = "%Y"
 
-  it("labels an undo entry with its time and sequence", function()
-    assert.are.equal(os.date("%Y-%m-%d %I:%M:%S %p", 1627784719) .. " - 1", label.for_undonr(1))
-  end)
-
-  it("labels a sequence missing from the undo tree", function()
-    assert.are.equal("{unknown} - 9", label.for_undonr(9))
+    assert.are.equal("#4  " .. os.date("%Y", 1627784719), label.title(4, 1627784719))
+    assert.are.equal("#0", label.title(0, 0))
   end)
 end)
 
-describe("label.relative", function()
-  it("says just now for the present and the near past", function()
-    assert.are.equal("just now", label.relative(os.time()))
-    assert.are.equal("just now", label.relative(os.time() - 30))
-    assert.are.equal("just now", label.relative(os.time() + 60))
-  end)
+describe("label.apply", function()
+  it("names the current buffer and leaves the statusline and winbar alone", function()
+    local vim = fakevim.new(fakevim.history({ {}, { "first" } }))
+    vim:install()
 
-  it("uses the largest unit that fits", function()
-    assert.are.equal("2m ago", label.relative(os.time() - 120))
-    assert.are.equal("1h ago", label.relative(os.time() - 3600))
-    assert.are.equal("3d ago", label.relative(os.time() - 3 * 86400))
-    assert.are.equal("2w ago", label.relative(os.time() - 14 * 86400))
-    assert.are.equal("4mo ago", label.relative(os.time() - 120 * 86400))
-    assert.are.equal("2y ago", label.relative(os.time() - 2 * 365 * 86400))
-  end)
-end)
+    label.apply("diffundo://1/#1")
 
-describe("label.short", function()
-  it("compacts the time to a bare unit", function()
-    assert.are.equal("now", label.short(os.time()))
-    assert.are.equal("2m", label.short(os.time() - 120))
-    assert.are.equal("1h", label.short(os.time() - 3600))
-    assert.are.equal("3d", label.short(os.time() - 3 * 86400))
-    assert.are.equal("2w", label.short(os.time() - 14 * 86400))
-    assert.are.equal("4mo", label.short(os.time() - 120 * 86400))
-    assert.are.equal("2y", label.short(os.time() - 2 * 365 * 86400))
+    assert.are.equal("diffundo://1/#1", vim:current_buffer().name)
+    assert.is_nil(vim.windows[vim.current_win].options.statusline)
+    assert.is_nil(vim.windows[vim.current_win].options.winbar)
   end)
 end)

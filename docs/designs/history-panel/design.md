@@ -1,7 +1,7 @@
 # History pane — Design
 
 **Project:** vim-diffundo
-**Status:** design agreed — implementation not started
+**Status:** implemented
 **Decision record:** [ADR 4. History pane](../../adr/0004-history-pane.md)
 **Supersedes:** the focused two-float history sidebar (`:Diffundo history`)
 **Last updated:** 2026-09-26
@@ -41,7 +41,7 @@ into the pane, and it expands into the whole undo tree.
   notice. The diff stays on its `#seq` while you edit and the pane re-renders
   as you go, so you can leave it up and watch your changes against `#0`.
 - **No winbar or statusline label.** The diff buffer keeps only its name
-  (`diffundo://#4`) for `:ls` and statusline plugins.
+  (`diffundo://<source bufnr>/#4`) for `:ls` and statusline plugins.
 - **Removed:** `:Diffundo history` and the `-no-history` flag.
   `g:diffundo_history = false` still turns the pane off.
 
@@ -95,7 +95,8 @@ lanes pip preview…                #seq
 
   A diff on a written state therefore shows the write pip. The title always
   names the diff's `#seq`, and the diff row carries the `DiffundoDiff`
-  highlight, so it stays findable in the expanded view.
+  highlight, so it stays findable in the expanded view. On a branch's
+  junction row the pip replaces the `┘` cap (`├○`, `├w`).
 - **Preview** is the change that state made, as the history rows compute it
   today (`+ line`, `- line`, `+2 -1 lines`). `#0` has no preview. A preview
   too long for the pane is cut with a single `…`.
@@ -280,7 +281,7 @@ Highlights, all `default link` so colour schemes can override them:
 |---|---|---|
 | `DiffundoGap` | `Comment` | gap rows |
 | `DiffundoDiff` | `CursorLine` | the diff's row |
-| `DiffundoBuffer` | `Bold` | the buffer's row |
+| `DiffundoBuffer` | bold | the buffer's row |
 
 ## Cost and caching
 

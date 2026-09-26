@@ -4,12 +4,10 @@ local M = {}
 ---@field name string
 ---@field bang boolean
 ---@field rest string
----@field no_history boolean
 
-M.names = { "earlier", "later", "search", "search!", "history" }
-M.flags = { "-no-history" }
+M.names = { "earlier", "later", "search", "search!", "focus" }
 
-local takes_bang = { earlier = false, later = false, search = true, history = false }
+local takes_bang = { earlier = false, later = false, search = true, focus = false }
 
 ---@param head string
 ---@param rest string
@@ -20,7 +18,7 @@ local function finish(head, rest)
   if allowed == nil or (bang == "!" and not allowed) then
     return nil
   end
-  return { name = name, bang = bang == "!", rest = rest, no_history = false }
+  return { name = name, bang = bang == "!", rest = rest }
 end
 
 ---@param args string
@@ -30,18 +28,7 @@ function M.parse(args)
   if head == nil then
     return nil
   end
-  if head ~= "-no-history" then
-    return finish(head, rest)
-  end
-  local second, tail = rest:match("^%s*(%S+)%s?(.*)$")
-  if second == nil then
-    return nil
-  end
-  local parsed = finish(second, tail)
-  if parsed then
-    parsed.no_history = true
-  end
-  return parsed
+  return finish(head, rest)
 end
 
 ---@param arglead string
@@ -52,12 +39,8 @@ function M.complete(arglead, cmdline)
   if not before:match("^%s*%S+%s+$") then
     return {}
   end
-  local pool = M.names
-  if arglead:sub(1, 1) == "-" then
-    pool = M.flags
-  end
   local candidates = {}
-  for _, candidate in ipairs(pool) do
+  for _, candidate in ipairs(M.names) do
     if candidate:sub(1, #arglead) == arglead then
       table.insert(candidates, candidate)
     end

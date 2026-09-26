@@ -3,18 +3,27 @@
 ---@class vim.undotree
 ---@field seq_last integer
 ---@field seq_cur integer
+---@field save_last integer|nil
 ---@field entries diffundo.UndoEntry[]
 
 ---@class vim.fn
 ---@field changenr fun(): integer
----@field undotree fun(): vim.undotree
+---@field undotree fun(buf?: integer): vim.undotree
+---@field winline fun(): integer
 ---@field input fun(prompt: any): string
 ---@field [string] fun(...): any
 
 ---@class vim.api
 ---@field nvim_tabpage_list_wins fun(tabpage: integer): integer[]
 ---@field nvim_win_get_buf fun(window: integer): integer
----@field nvim_win_call fun(window: integer, fn: fun())
+---@field nvim_win_call fun(window: integer, fn: fun(): any): any
+---@field nvim_win_get_height fun(window: integer): integer
+---@field nvim_win_get_width fun(window: integer): integer
+---@field nvim_buf_get_changedtick fun(buffer: integer): integer
+---@field nvim_create_augroup fun(name: string, opts: table): integer
+---@field nvim_del_augroup_by_id fun(id: integer)
+---@field nvim_create_autocmd fun(events: string|string[], opts: table): integer
+---@field nvim_set_hl fun(ns_id: integer, name: string, opts: table)
 ---@field nvim_set_current_win fun(window: integer)
 ---@field nvim_get_current_win fun(): integer
 ---@field nvim_win_is_valid fun(window: integer): boolean
@@ -44,6 +53,7 @@
 ---@field bufhidden string
 ---@field swapfile boolean
 ---@field readonly boolean
+---@field modifiable boolean
 
 ---@class vim.wo
 ---@field diff boolean
@@ -58,6 +68,7 @@
 ---@field relativenumber boolean
 ---@field spell boolean
 ---@field wrap boolean
+---@field cursorline boolean
 ---@field statusline string
 ---@field winbar string
 
@@ -88,6 +99,7 @@
 ---@field log vim.log
 ---@field keymap vim.keymap
 ---@field cmd fun(command: string)
+---@field schedule fun(callback: fun())
 ---@field notify fun(message: string, level?: integer)
 ---@field keycode fun(keys: string): string
 ---@field regex fun(pattern: string): vim.regex

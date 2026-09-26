@@ -26,22 +26,20 @@ One command, `:Diffundo`, with subcommands (tab-completes):
 
 *:Diffundo search! {pattern}* : the same for a line that was **removed**.
 
-*:Diffundo history* : toggle the floating history sidebar — the undo tree as
-a gutter of branch lanes, a one-line preview of what each edit changed, and
-the age right-aligned. Runs of consecutive states fold into a caption row.
+*:Diffundo focus* : jump into the history pane and expand it into the whole
+undo tree (opening the diff split at the buffer's own state first if needed).
 
-In the sidebar: *j*/*k* move by change (or use counts, *gg*/*G*), *J*/*K* move
-between written states, *<cr>* shows the selected state in the diff split,
-*/* filters the list (vim regex, empty to clear), *g?* notifies this key map,
-*q*/*<esc>* closes it.
+In the expanded pane: *j*/*k* move by state (or use counts, *gg*/*G*), *J*/*K*
+move between written states, *<cr>* shows the selected state in the diff split,
+*/* filters the list (vim regex, empty to clear), *zo*/*zc* open and close
+folds, *g?* notifies this key map, and *q*/*<esc>* (or leaving the window, e.g.
+*<c-w>p*) collapse the pane and return to your buffer.
 
 Search walks the undo *tree*: each state is compared with the state it was
 edited from, so switching undo branches never shows up as a change.
 
-The diff window is labelled with the timestamp and sequence number of the undo
-state it shows. The label is set as that window's `'statusline'`; when the
-editor already uses a `'winbar'` it is set there too, so the diff lines stay
-on the same screen rows as the source window's.
+The diff window gets no statusline or winbar label, so its lines stay on the
+same screen rows as your buffer's; the history pane shows which state it is.
 
 Lua API
 -------
@@ -65,35 +63,53 @@ local gone = diffundo.search("TODO", { removed = true })
 yields `{ seq, parent, time, save, lines, parent_lines, added, removed }` per
 undo state, newest first, and must be called with the source buffer current.
 
-History sidebar
----------------
+History pane
+------------
 
-`:Diffundo earlier/later/search` open the history float by default;
-`:Diffundo -no-history earlier` (or `g:diffundo_history` = `false`) keeps the
-minimal layout. The float sits in the upper right of the editor by default;
-`g:diffundo_history_width` (default 40) sets its width and
-`g:diffundo_fold_min` (default 3) the fold threshold: branch stretches longer
-than this collapse under a fold.
+While the diff split is open, a small pane in the diff window's lower right
+corner shows what the diff is comparing -- like an LSP hover, it never takes
+the focus, so you can keep editing and keep pressing `.`:
 
-Each row is `<tree> <preview …><time - seq>`: the tree gutter is padded to the
-view's widest lane plus one space, so the preview and time columns align down
-the panel. Ancestor lanes draw `┊`; the
-row's own lane is `│`, `○`/`◉` when it is the diff's current state (`◉` also
-saved), or `●` when saved. Where a branch leaves the trunk, both ends of its
-lane get a `├┘` junction cap (deeper lanes nest, e.g. `┊┊├┘`). The preview
-shows a single changed line (`+ <line>`, `- <line>`) or counts like
-`+2 -1 lines`; the right column is the compact relative age with the state's
-sequence number (`2m - 3`, `3d - 20`, `2w - 4`).
+```
+╭─ #4  2026-09-26 10:12:03 ────────╮
+│@ + return x                   #12│   <- the state your buffer is at
+│┆   7 undos 1w                    │   <- states in between (and writes)
+│○ - local y = 1                 #4│   <- the state the diff shows
+│┆   3 undos                       │
+╰──────────────────── +3 -5 lines ─╯
+```
 
-Long stretches on one branch collapse under a single fold whose foldtext
-summarizes the hidden states (`+8 states: +5 -3 lines 8 undos`); the fold
-never covers the branch's junction caps, and the buffer keeps every state's
-own change description — `zo`/`zc` open/fold one fold, `zr`/`zm` all. A footer
-shows the selected state's sequence number,
-saved/current state, absolute time and change totals, then `shown/total` and
-a right-aligned `help: g?` hint; `g?` in the sidebar notifies this key list.
-The float's rows come from `require("diffundo.history").rows`, the same list
-the future telescope/quickfix front-ends reuse.
+The title is the diff's state and its date; the footer is the size of the diff
+against your buffer. Each row is `lanes pip preview #seq`: the pip is `@` for
+your buffer's state, `w` for a written state and `○` for the diff's state
+(first match wins), otherwise the tree lane. A buffer with no changes still
+opens, against `#0`, so you can leave the pane up and watch your edits pile up.
+It flips to the upper corner when your cursor would sit under it, and closes
+with the diff window.
+
+`:Diffundo focus` expands the pane into the whole tree, using the same row
+format; branch stretches longer than `g:diffundo_fold_min` fold into
+`┆ N undos` captions.
+
+Configuration:
+
+```lua
+vim.g.diffundo_history = false                     -- no pane
+vim.g.diffundo_glyphs = { write = "ⓦ" }             -- merged over the defaults
+vim.g.diffundo_date_format = "%Y-%m-%d %H:%M:%S"   -- or function(time) -> string
+vim.g.diffundo_history_width = 40                  -- pane width
+vim.g.diffundo_fold_min = 3                        -- expanded-view fold threshold
+```
+
+The default glyphs are `{ buffer = "@", diff = "○", write = "w", gap = "┆",
+ellipsis = "…" }`. `ⓦ` is opt-in because terminals disagree on the width of
+circled letters (kitty and WezTerm draw it in one cell). The pane's rows use the
+`DiffundoGap` (gap rows, linked to `Comment`), `DiffundoDiff` (linked to
+`CursorLine`) and `DiffundoBuffer` (bold) highlight groups.
+
+The rows come from `require("diffundo.history").rows`; each state's text and
+its diff size against your buffer are cached, so the pane only walks new undo
+states as you edit.
 
 Setup
 -----
