@@ -7,10 +7,7 @@ describe("glyphs.get", function()
   end)
 
   it("defaults to narrow glyphs with a plain w for writes", function()
-    assert.are.same(
-      { buffer = "@", diff = "○", write = "w", gap = "┆", ellipsis = "…" },
-      glyphs.get()
-    )
+    assert.are.same({ buffer = "@", write = "w", gap = "┆", ellipsis = "…" }, glyphs.get())
   end)
 
   it("merges g:diffundo_glyphs over the defaults", function()

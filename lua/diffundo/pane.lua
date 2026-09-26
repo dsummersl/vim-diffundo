@@ -327,9 +327,24 @@ local function fold(win, display)
   vim.t.diffundo_pane_folds = keys
 end
 
+---@param name string
+---@return table
+local function bolded(name)
+  local resolved = vim.api.nvim_get_hl(0, { name = name, link = false })
+  resolved.bold = true
+  resolved.default = true
+  local cterm = {}
+  for key, value in pairs(resolved.cterm or {}) do
+    cterm[key] = value
+  end
+  cterm.bold = true
+  resolved.cterm = cterm
+  return resolved
+end
+
 local function define_highlights()
   vim.api.nvim_set_hl(0, "DiffundoGap", { link = "Comment", default = true })
-  vim.api.nvim_set_hl(0, "DiffundoDiff", { link = "CursorLine", default = true })
+  vim.api.nvim_set_hl(0, "DiffundoDiff", bolded("CursorLine"))
   vim.api.nvim_set_hl(0, "DiffundoBuffer", { bold = true, default = true })
 end
 

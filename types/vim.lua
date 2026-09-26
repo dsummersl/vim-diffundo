@@ -25,6 +25,7 @@
 ---@field nvim_del_augroup_by_id fun(id: integer)
 ---@field nvim_create_autocmd fun(events: string|string[], opts: table): integer
 ---@field nvim_set_hl fun(ns_id: integer, name: string, opts: table)
+---@field nvim_get_hl fun(ns_id: integer, opts: table): table
 ---@field nvim_set_current_win fun(window: integer)
 ---@field nvim_get_current_win fun(): integer
 ---@field nvim_win_is_valid fun(window: integer): boolean

@@ -627,7 +627,7 @@ test({
     await denops.cmd("Diffundo earlier");
     assertEquals(await paneLines(denops), [
       "@ + four                              #4",
-      "○ + three                             #3",
+      "│ + three                             #3",
       "┆   2 undos",
     ]);
     const labels = await paneLabels(denops);
@@ -641,7 +641,7 @@ test({
     assertEquals(await paneLines(denops), [
       "@ + four                              #4",
       "┆   1 undo",
-      "○ + two                               #2",
+      "│ + two                               #2",
       "┆   1 undo",
     ]);
     assertEquals((await paneLabels(denops)).footer, " +2 -0 lines ");
@@ -677,7 +677,7 @@ test({
     await denops.call("wait", 100, "v:false");
     assertEquals(await paneLines(denops), [
       "@ +1 -1 lines                         #1",
-      "○                                     #0",
+      "╷                                     #0",
     ]);
     assertEquals((await paneLabels(denops)).footer, " +1 -1 lines ");
   },
@@ -718,7 +718,7 @@ test({
     await assertExpanded(denops, [
       "@ + two                               #2",
       "│ +1 -1 lines                         #1",
-      "│                                     #0",
+      "╷                                     #0",
     ]);
     assertEquals(await denops.eval("t:diffundo_diff_undonr"), 2);
 
@@ -833,18 +833,18 @@ test({
     await denops.cmd("Diffundo focus");
     await assertExpanded(denops, [
       "@  + y                                #5",
-      "├┘ + x                                #4",
-      "┊│ + c                                #3",
-      "├┘ + b                                #2",
+      "├╯ + x                                #4",
+      "┊╷ + c                                #3",
+      "├╯ + b                                #2",
       "│  +1 -1 lines                        #1",
-      "│                                     #0",
+      "╷                                     #0",
     ]);
 
     await denops.call("feedkeys", "q", "x");
     await denops.cmd("Diffundo earlier");
     assertEquals(await paneLines(denops), [
       "@  + y                                #5",
-      "├○ + x                                #4",
+      "├╯ + x                                #4",
       "┆    3 undos",
     ]);
   },
@@ -872,7 +872,7 @@ test({
       "├w + c                                #3",
       "├w + b                                #2",
       "w  +1 -1 lines                        #1",
-      "│                                     #0",
+      "╷                                     #0",
     ]);
 
     await denops.call("feedkeys", "q", "x");
@@ -901,7 +901,7 @@ test({
     assertEquals(await paneLines(denops), [
       "┆    2 undos",
       "├@ + b                                #2",
-      "○  +1 -1 lines                        #1",
+      "│  +1 -1 lines                        #1",
     ]);
   },
 });
@@ -923,7 +923,7 @@ test({
     await denops.cmd("Diffundo search x");
     assertEquals(await paneLines(denops), [
       "┆   1 undo",
-      "○ + x2                                #4",
+      "│ + x2                                #4",
       "┆   1 undo",
       "│ + x1                                #2",
       "┆   1 undo",

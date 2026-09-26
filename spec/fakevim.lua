@@ -347,6 +347,14 @@ local function api(self)
     nvim_set_hl = function(_, name, opts)
       self.hl_groups[name] = opts
     end,
+    nvim_get_hl = function(_, opts)
+      local found = self.hl_groups[opts.name] or {}
+      local cloned = {}
+      for key, value in pairs(found) do
+        cloned[key] = value
+      end
+      return cloned
+    end,
     nvim_buf_set_name = function(_, name)
       current_buffer(self).name = name
     end,
