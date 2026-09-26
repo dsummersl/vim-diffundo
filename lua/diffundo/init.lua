@@ -169,30 +169,34 @@ function M.search(needle, opts)
   end)
 end
 
----@param sub diffundo.Subcommand
----@return diffundo.Hit|nil
-local function dispatch(sub)
-  if sub.name == "focus" then
+---@type table<string, fun(sub: diffundo.Subcommand)>
+local handlers = {
+  focus = function()
     M.focus()
-    return nil
-  end
-  if sub.name == "close" then
+  end,
+  close = function()
     M.close()
-    return nil
-  end
-  if sub.name == "earlier" then
+  end,
+  earlier = function(sub)
     M.earlier(sub.rest)
-    return nil
-  end
-  if sub.name == "later" then
+  end,
+  later = function(sub)
     M.later(sub.rest)
-    return nil
-  end
-  if sub.name == "undo" then
+  end,
+  undo = function(sub)
     if sub.rest == "" then
       error("undo needs a number", 0)
     end
     M.undo(sub.rest)
+  end,
+}
+
+---@param sub diffundo.Subcommand
+---@return diffundo.Hit|nil
+local function dispatch(sub)
+  local handler = handlers[sub.name]
+  if handler then
+    handler(sub)
     return nil
   end
   if sub.rest == "" then
