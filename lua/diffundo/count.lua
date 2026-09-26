@@ -18,4 +18,14 @@ function M.normalize(count)
   return trimmed
 end
 
+---@param count string|nil
+---@return string
+function M.exact(count)
+  local trimmed = (count or ""):match("^%s*(.-)%s*$")
+  if not trimmed:match("^%d+$") then
+    error("invalid undo number: " .. trimmed .. " (expected a plain number)", 0)
+  end
+  return trimmed
+end
+
 return M

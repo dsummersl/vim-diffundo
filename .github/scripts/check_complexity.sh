@@ -50,9 +50,10 @@ REPORT=$(jq -rn --slurpfile fns_in <(functions) --slurpfile brs_in <(branches) \
     and (.range.byteOffset.start <= $b.range.byteOffset.start)
     and (.range.byteOffset.end >= $b.range.byteOffset.end);
   def innermost($b): [$fns[] | select(contains($b))] | min_by(span);
-  ($brs | map(innermost(.) | select(. != null) | .range.byteOffset.start) | group_by(.) | map({key: (.[0] | tostring), value: length}) | from_entries) as $counts
+  def key: .file + ":" + (.range.byteOffset.start | tostring);
+  ($brs | map(innermost(.) | select(. != null) | key) | group_by(.) | map({key: .[0], value: length}) | from_entries) as $counts
   | $fns[]
-  | (1 + ($counts[.range.byteOffset.start | tostring] // 0)) as $cc
+  | (1 + ($counts[key] // 0)) as $cc
   | (span + 1) as $len
   | select($cc > $maxcc or $len > $maxlines)
   | "\(.file):\(.range.start.line + 1) - \(name) (complexity \($cc), \($len) lines)"

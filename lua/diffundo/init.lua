@@ -113,6 +113,26 @@ function M.later(amount)
   step("later", amount)
 end
 
+---@param seq string
+function M.undo(seq)
+  cursor_neutral(function()
+    local normalized = count.exact(seq)
+    split.open()
+    restore.within_source(function()
+      vim.cmd("silent undo " .. normalized)
+      split.place(current_lines(), vim.fn.changenr())
+    end)
+    pane.set_filter(nil)
+    pane.render()
+    return nil
+  end)
+end
+
+function M.close()
+  pane.close()
+  split.close()
+end
+
 function M.focus()
   if not split.is_open() then
     cursor_neutral(function()
@@ -149,19 +169,34 @@ function M.search(needle, opts)
   end)
 end
 
+---@type table<string, fun(sub: diffundo.Subcommand)>
+local handlers = {
+  focus = function()
+    M.focus()
+  end,
+  close = function()
+    M.close()
+  end,
+  earlier = function(sub)
+    M.earlier(sub.rest)
+  end,
+  later = function(sub)
+    M.later(sub.rest)
+  end,
+  undo = function(sub)
+    if sub.rest == "" then
+      error("undo needs a number", 0)
+    end
+    M.undo(sub.rest)
+  end,
+}
+
 ---@param sub diffundo.Subcommand
 ---@return diffundo.Hit|nil
 local function dispatch(sub)
-  if sub.name == "focus" then
-    M.focus()
-    return nil
-  end
-  if sub.name == "earlier" then
-    M.earlier(sub.rest)
-    return nil
-  end
-  if sub.name == "later" then
-    M.later(sub.rest)
+  local handler = handlers[sub.name]
+  if handler then
+    handler(sub)
     return nil
   end
   if sub.rest == "" then

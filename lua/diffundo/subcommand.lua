@@ -5,9 +5,10 @@ local M = {}
 ---@field bang boolean
 ---@field rest string
 
-M.names = { "earlier", "later", "search", "search!", "focus" }
+M.names = { "earlier", "later", "undo", "search", "search!", "focus", "close" }
 
-local takes_bang = { earlier = false, later = false, search = true, focus = false }
+local takes_bang =
+  { earlier = false, later = false, undo = false, search = true, focus = false, close = false }
 
 ---@param head string
 ---@param rest string
