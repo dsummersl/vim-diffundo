@@ -493,6 +493,28 @@ describe("the history pane from commands", function()
     }, vim:pane_lines())
   end)
 
+  it("search narrows the pane to the matching states and footers the filter", function()
+    diffundo.command("search second")
+
+    assert.are.same({
+      "┆   1 undo",
+      "○ + second                          #2",
+      "┆   1 undo",
+    }, vim:pane_lines())
+    local config = vim.windows[vim:pane_window()].config
+    assert.are.equal(" filter: second ", config.footer)
+  end)
+
+  it("search! footers the removed-line filter and earlier clears it", function()
+    diffundo.command("search! nonesuch")
+    assert.are.equal(" filter!: nonesuch ", vim.windows[vim:pane_window()].config.footer)
+
+    diffundo.command("earlier")
+
+    assert.are.equal(" +1 -0 lines ", vim.windows[vim:pane_window()].config.footer)
+    assert.are.equal(3, #vim:pane_lines())
+  end)
+
   it("stays closed when g:diffundo_history is false", function()
     vim.g.diffundo_history = false
 

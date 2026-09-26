@@ -218,6 +218,13 @@ local function commands(self)
     delfold = function()
       self.folds = {}
     end,
+    foldopen = function(_, first)
+      for _, found in ipairs(self.folds) do
+        if found.first == tonumber(first) then
+          found.open = true
+        end
+      end
+    end,
     ["normal!"] = function(rest)
       if rest == "zE" then
         self.folds = {}
@@ -436,6 +443,14 @@ local function fn(self)
     end,
     winline = function()
       return self.winline or 1
+    end,
+    foldclosed = function(line)
+      for _, found in ipairs(self.folds) do
+        if found.first <= line and line <= found.last and not found.open then
+          return found.first
+        end
+      end
+      return -1
     end,
   }
 end

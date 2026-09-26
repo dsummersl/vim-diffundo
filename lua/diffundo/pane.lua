@@ -92,14 +92,25 @@ local function all_rows()
   return fresh
 end
 
+---@class diffundo.Filter
+---@field pattern string
+---@field removed boolean
+
+---@return diffundo.Filter|nil
+local function active_filter()
+  return vim.t.diffundo_pane_filter
+end
+
 ---@param all diffundo.Row[]
----@return diffundo.Row[]
-local function view_of(all)
-  local asked = vim.t.diffundo_pane_filter
-  if asked == nil or not expanded() then
-    return all
+---@param filter diffundo.Filter
+---@return table<integer, boolean>
+local function matches(all, filter)
+  local keep = {}
+  local regex = pattern.compile(filter.pattern)
+  for _, row in ipairs(history.filtered(all, regex, { removed = filter.removed })) do
+    keep[row.seq] = true
   end
-  return history.filtered(all, pattern.compile(asked))
+  return keep
 end
 
 ---@param all diffundo.Row[]
@@ -144,6 +155,19 @@ local function footer_for(seq)
     return #lines.added_lines(state, current), #lines.removed_lines(state, current)
   end)
   return ("+%d -%d lines"):format(added, removed)
+end
+
+---@param seq integer
+---@return string
+local function footer_text(seq)
+  local filter = active_filter()
+  if filter == nil then
+    return footer_for(seq)
+  end
+  if filter.removed then
+    return "filter!: " .. filter.pattern
+  end
+  return "filter: " .. filter.pattern
 end
 
 ---@param all diffundo.Row[]
@@ -211,10 +235,15 @@ local function config_for(dwin, height, title, footer)
   }
 end
 
+---@param all diffundo.Row[]
 ---@param buffer integer
 ---@param current integer
 ---@return table<integer, boolean>|nil
-local function keep_for(buffer, current)
+local function keep_for(all, buffer, current)
+  local filter = active_filter()
+  if filter then
+    return matches(all, filter)
+  end
   if expanded() then
     return nil
   end
@@ -259,19 +288,43 @@ local function captions_of(display)
 end
 
 ---@param win integer
+---@return table<string, boolean>
+local function opened_folds(win)
+  local opened = {}
+  vim.api.nvim_win_call(win, function()
+    for _, key in ipairs(vim.t.diffundo_pane_folds or {}) do
+      local start = math.floor(tonumber(key:match("^%d+")) or 1)
+      if vim.fn.foldclosed(start) == -1 then
+        opened[key] = true
+      end
+    end
+  end)
+  return opened
+end
+
+---@param win integer
 ---@param display diffundo.Display
 local function fold(win, display)
   vim.t.diffundo_pane_captions = captions_of(display)
+  local opened = opened_folds(win)
+  local keys = {}
   vim.api.nvim_win_call(win, function()
     vim.wo.foldmethod = "manual"
     vim.cmd("normal! zE")
     for _, span in ipairs(display.folds) do
-      vim.cmd(span.start .. "," .. span.stop .. "fold")
+      keys[#keys + 1] = span.start .. "," .. span.stop
+      vim.cmd(keys[#keys] .. "fold")
     end
     vim.wo.foldlevel = 0
+    for _, key in ipairs(keys) do
+      if opened[key] then
+        vim.cmd(key .. "foldopen")
+      end
+    end
     vim.wo.foldtext =
       "get(get(t:, 'diffundo_pane_captions', {}), v:foldstart, getline(v:foldstart))"
   end)
+  vim.t.diffundo_pane_folds = keys
 end
 
 local function define_highlights()
@@ -373,7 +426,6 @@ function M.render()
     return
   end
   local all = all_rows()
-  local shown = view_of(all)
   local buffer = in_source(vim.fn.changenr)
   local current = vim.t.diffundo_diff_undonr
   cache.remember(
@@ -381,20 +433,20 @@ function M.render()
     current,
     vim.api.nvim_buf_get_lines(vim.t.diffundo_diff_bn, 0, -1, false)
   )
-  local display = history.display(shown, {
+  local display = history.display(all, {
     width = width_for(dwin),
     buffer = buffer,
     current = current,
-    keep = keep_for(buffer, current),
+    keep = keep_for(all, buffer, current),
     fold_min = vim.g.diffundo_fold_min or 3,
     glyphs = glyphs.get(),
   })
   local height = height_for(dwin, #display.lines)
-  local win = ensure_float(config_for(dwin, height, title_for(all, current), footer_for(current)))
+  local win = ensure_float(config_for(dwin, height, title_for(all, current), footer_text(current)))
   window.render(win, display.lines)
   paint(win, display)
   fold(win, display)
-  vim.t.diffundo_pane_seqs = seqs_for(shown, display)
+  vim.t.diffundo_pane_seqs = seqs_for(all, display)
 end
 
 ---@return integer|nil
@@ -431,7 +483,7 @@ function M.update_labels()
   vim.api.nvim_win_set_config(win, {
     title = " " .. title_for(all_rows(), seq) .. " ",
     title_pos = "left",
-    footer = " " .. footer_for(seq) .. " ",
+    footer = " " .. footer_text(seq) .. " ",
     footer_pos = "right",
   })
 end
@@ -510,7 +562,6 @@ end
 ---@param back boolean
 function M.collapse(back)
   vim.t.diffundo_pane_expanded = false
-  vim.t.diffundo_pane_filter = nil
   if back then
     back_to_source()
   end
@@ -529,6 +580,7 @@ function M.place()
     end)
   end)
   M.render()
+  select_seq(seq)
   M.update_labels()
 end
 
@@ -562,15 +614,33 @@ function M.move_save(dir)
   end
 end
 
-function M.filter()
-  local asked = vim.fn.input("filter: ")
-  if asked == "" then
+---@param needle string|nil
+---@param removed boolean|nil
+function M.set_filter(needle, removed)
+  if needle == nil or needle == "" then
     vim.t.diffundo_pane_filter = nil
-  else
-    pattern.compile(asked)
-    vim.t.diffundo_pane_filter = asked
+    return
   end
+  pattern.compile(needle)
+  vim.t.diffundo_pane_filter = { pattern = needle, removed = removed == true }
+end
+
+local function select_first_match()
+  for _, seq in ipairs(vim.t.diffundo_pane_seqs or {}) do
+    if seq >= 0 then
+      select_seq(seq)
+      return
+    end
+  end
+end
+
+function M.filter()
+  M.set_filter(vim.fn.input("filter: "), false)
   M.render()
+  if active_filter() then
+    select_first_match()
+  end
+  M.update_labels()
 end
 
 function M.close()
@@ -588,6 +658,7 @@ function M.close()
   vim.t.diffundo_pane_filter = nil
   vim.t.diffundo_pane_seqs = nil
   vim.t.diffundo_pane_captions = nil
+  vim.t.diffundo_pane_folds = nil
 end
 
 return M

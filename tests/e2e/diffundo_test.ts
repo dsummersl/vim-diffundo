@@ -806,6 +806,15 @@ test({
     assertEquals(await denops.call("foldtextresult", 3), "┆    4 undos");
     await denops.cmd("3normal! zo");
     assertEquals(await denops.call("foldclosed", 3), -1);
+
+    // WHY: <cr> on a state inside the opened fold re-renders the pane; the
+    // fold must stay open so the picked row stays visible.
+    await denops.cmd("normal! 4G");
+    await denops.call("nvim_input", "<CR>");
+    await denops.call("wait", 100, "v:false");
+    assertEquals(await denops.eval("t:diffundo_diff_undonr"), 6);
+    assertEquals(await denops.call("foldclosed", 4), -1);
+    assertEquals(await denops.call("line", "."), 4);
   },
 });
 
@@ -894,6 +903,48 @@ test({
       "├@ + b                                #2",
       "○  +1 -1 lines                        #1",
     ]);
+  },
+});
+
+test({
+  mode: "nvim",
+  name: ":Diffundo search and / narrow the pane to the matching states",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [
+      ["a"],
+      ["a", "x1"],
+      ["a", "x1", "b"],
+      ["a", "x1", "b", "x2"],
+      ["a", "x1", "b", "x2", "c"],
+    ]);
+
+    await denops.cmd("Diffundo search x");
+    assertEquals(await paneLines(denops), [
+      "┆   1 undo",
+      "○ + x2                                #4",
+      "┆   1 undo",
+      "│ + x1                                #2",
+      "┆   1 undo",
+    ]);
+    assertEquals((await paneLabels(denops)).footer, " filter: x ");
+
+    // WHY: a plain step clears the filter; #3 is two lines behind the buffer.
+    await denops.cmd("Diffundo earlier");
+    assertEquals((await paneLabels(denops)).footer, " +2 -0 lines ");
+
+    await denops.cmd("Diffundo focus");
+    await denops.call("feedkeys", "/x\r", "x");
+    assertEquals(await paneLines(denops), [
+      "┆   1 undo",
+      "│ + x2                                #4",
+      "┆   1 undo",
+      "│ + x1                                #2",
+      "┆   1 undo",
+    ]);
+    assertEquals(await denops.call("line", "."), 2);
+    assertEquals((await paneLabels(denops)).footer, " filter: x ");
   },
 });
 

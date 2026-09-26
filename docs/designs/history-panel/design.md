@@ -139,10 +139,20 @@ Keys in the expanded pane:
 | `j` / `k`, `gg` / `G` | move by state |
 | `J` / `K` | move between written states |
 | `<cr>` | show the state under the cursor in the diff (stays in the pane) |
-| `/` | filter (vim regex, empty clears) |
+| `/` | filter like `:Diffundo search` (vim regex, empty clears) |
 | `zo` / `zc`, `zr` / `zm` | open / close folds |
 | `g?` | notify the key list |
 | `q`, `<esc>`, `<c-w>p` | collapse and return to the source window |
+
+### Filtering
+
+`:Diffundo search {pattern}` and `/` in the expanded pane set the same filter:
+the pane keeps only the states whose edit added (`search!`: removed) a line
+matching the pattern, collapsed-style, with `┆ N undos` gap rows for the rest,
+and the footer reads `filter: {pattern}` (`filter!: {pattern}`) in place of the
+diff size. The filter survives collapsing; `/` with an empty pattern or the
+next `:Diffundo earlier`/`later` clears it. Folds the user opened stay open
+across re-renders (`<cr>` re-renders the pane).
 
 ## Scenarios
 

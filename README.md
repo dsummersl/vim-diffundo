@@ -26,13 +26,19 @@ One command, `:Diffundo`, with subcommands (tab-completes):
 
 *:Diffundo search! {pattern}* : the same for a line that was **removed**.
 
+Searching also filters the history pane: only the states whose edit matches
+stay visible, with `┆ N undos` rows standing in for the rest, and the pane's
+footer reads `filter: {pattern}` (`filter!:` for removals) instead of the diff
+size. The next `:Diffundo earlier`/`later` clears it.
+
 *:Diffundo focus* : jump into the history pane and expand it into the whole
 undo tree (opening the diff split at the buffer's own state first if needed).
 
 In the expanded pane: *j*/*k* move by state (or use counts, *gg*/*G*), *J*/*K*
 move between written states, *<cr>* shows the selected state in the diff split,
-*/* filters the list (vim regex, empty to clear), *zo*/*zc* open and close
-folds, *g?* notifies this key map, and *q*/*<esc>* (or leaving the window, e.g.
+*/* filters the pane exactly like `:Diffundo search` does (vim regex, empty to
+clear) and puts the cursor on the newest match, *zo*/*zc* open and close
+folds (a fold you opened stays open when *<cr>* re-renders the pane), *g?* notifies this key map, and *q*/*<esc>* (or leaving the window, e.g.
 *<c-w>p*) collapse the pane and return to your buffer.
 
 Search walks the undo *tree*: each state is compared with the state it was

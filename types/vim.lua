@@ -10,6 +10,7 @@
 ---@field changenr fun(): integer
 ---@field undotree fun(buf?: integer): vim.undotree
 ---@field winline fun(): integer
+---@field foldclosed fun(line: integer): integer
 ---@field input fun(prompt: any): string
 ---@field [string] fun(...): any
 

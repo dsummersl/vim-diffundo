@@ -97,6 +97,7 @@ local function step(command, amount)
     local normalized = count.normalize(amount)
     split.open()
     early_late(command, normalized)
+    pane.set_filter(nil)
     pane.render()
     return nil
   end)
@@ -142,6 +143,7 @@ function M.search(needle, opts)
     if hit == nil then
       split.place(current_lines(), vim.fn.changenr())
     end
+    pane.set_filter(needle, opts ~= nil and opts.removed == true)
     pane.render()
     return hit
   end)

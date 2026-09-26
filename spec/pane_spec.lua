@@ -288,18 +288,64 @@ describe("pane.focus", function()
     assert.matches("J/K written", vim:last_notification())
   end)
 
-  it("/ filters the rows and an empty filter clears it", function()
+  it("/ keeps only the matching rows with gap rows between and footers the filter", function()
     local asked = "b"
     vim.fn.input = function()
       return asked
     end
 
     vim:press("/")
-    assert.are.same({ "○ + b                               #2" }, vim:pane_lines())
+
+    assert.are.same({
+      "┆   1 undo",
+      "○ + b                               #2",
+      "┆   1 undo",
+    }, vim:pane_lines())
+    assert.are.same({ 2, 0 }, vim.windows[vim:pane_window()].cursor)
+    assert.are.equal(" filter: b ", config(vim).footer)
 
     asked = ""
     vim:press("/")
     assert.are.equal(4, #vim:pane_lines())
+    assert.are.equal(" +1 -0 lines ", config(vim).footer)
+  end)
+
+  it("keeps the filter when it collapses", function()
+    vim.fn.input = function()
+      return "a"
+    end
+    vim:press("/")
+
+    vim:press("q")
+
+    assert.are.same(
+      { "┆   2 undos", "│ + a                               #1" },
+      vim:pane_lines()
+    )
+    assert.are.equal(" filter: a ", config(vim).footer)
+  end)
+end)
+
+describe("pane.set_filter", function()
+  it("footers a removed-line filter with filter!", function()
+    show(vim, 2)
+    pane.set_filter("c", true)
+
+    pane.render()
+
+    assert.are.equal(" filter!: c ", config(vim).footer)
+    assert.are.same({ "┆   3 undos" }, vim:pane_lines())
+  end)
+
+  it("rejects a bad pattern before storing it", function()
+    vim.regex = function()
+      error("Vim:E54: Unmatched \\(", 0)
+    end
+
+    assert.has_error(function()
+      pane.set_filter("(", false)
+    end)
+    assert.is_nil(vim.t.diffundo_pane_filter)
   end)
 end)
 
@@ -346,6 +392,30 @@ describe("pane folds", function()
     assert.are.same({ { first = 3, last = 7 } }, vim.folds)
     assert.are.same({ ["3"] = "┆    5 undos" }, vim.t.diffundo_pane_captions)
     assert.are.equal(0, vim.windows[vim:pane_window()].options.foldlevel)
+  end)
+
+  it("keeps an opened fold open when <cr> shows a state inside it", function()
+    local h = fakevim.history({ {}, { "a" }, { "a", "b" }, { "a", "b", "c" } })
+    h:branch(2, { "x" })
+    h:branch(4, { "x", "y" })
+    h:branch(5, { "x", "y", "z" })
+    h:branch(6, { "x", "y", "z", "w" })
+    h:branch(7, { "x", "y", "z", "w", "v" })
+    h:branch(8, { "x", "y", "z", "w", "v", "u" })
+    h:branch(2, { "a", "b", "c", "d" })
+    vim = fakevim.new(h)
+    vim:install()
+    cache.reset(vim.source_bn)
+    show(vim, 10)
+    pane.focus()
+    vim.cmd("3,7foldopen")
+    vim.api.nvim_win_set_cursor(vim:pane_window(), { 5, 0 })
+
+    vim:press("<cr>")
+
+    assert.are.equal(6, vim.t.diffundo_diff_undonr)
+    assert.are.equal(-1, vim.fn.foldclosed(5))
+    assert.are.same({ 5, 0 }, vim.windows[vim:pane_window()].cursor)
   end)
 end)
 
