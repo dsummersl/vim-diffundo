@@ -201,8 +201,8 @@ describe("pane.focus", function()
     assert.are.equal(vim:pane_window(), vim.current_win)
     assert.are.same({
       "@ + c                               #3",
-      "╷ + b                               #2",
-      "╷ + a                               #1",
+      "│ + b                               #2",
+      "│ + a                               #1",
       "╷                                   #0",
     }, vim:pane_lines())
     assert.are.same({ 2, 0 }, vim.windows[vim:pane_window()].cursor)
@@ -301,7 +301,7 @@ describe("pane.focus", function()
 
     assert.are.same({
       "┆   1 undo",
-      "╷ + b                               #2",
+      "│ + b                               #2",
       "┆   1 undo",
     }, vim:pane_lines())
     assert.are.same({ 2, 0 }, vim.windows[vim:pane_window()].cursor)
@@ -322,7 +322,7 @@ describe("pane.focus", function()
     vim:press("q")
 
     assert.are.same(
-      { "┆   2 undos", "╷ + a                               #1" },
+      { "┆   2 undos", "│ + a                               #1" },
       vim:pane_lines()
     )
     assert.are.equal(" filter: a ", config(vim).footer)

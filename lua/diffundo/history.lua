@@ -385,24 +385,29 @@ local function junction_for(i, lane)
   return lane_gap(i, lane, i - 1) or lane_gap(i, lane, i + 1)
 end
 
+---@param i integer
 ---@param r diffundo.Row
 ---@param opts diffundo.DisplayOpts
 ---@param g diffundo.Glyphs
+---@param heads table<integer, boolean>
 ---@return string
-local function pip_for(r, opts, g)
+local function pip_for(i, r, opts, g, heads)
   if r.seq == opts.buffer then
     return g.buffer
   end
   if r.save then
     return g.write
   end
-  return "╷"
+  if heads[i] then
+    return "╷"
+  end
+  return "│"
 end
 
 ---@param pip string
 ---@return string
 local function cap_for(pip)
-  if pip == "╷" then
+  if pip == "│" or pip == "╷" then
     return "╯"
   end
   return pip
@@ -511,13 +516,14 @@ end
 ---@param view diffundo.Row[]
 ---@param lane integer[]
 ---@param open table<integer, table<integer, boolean>>
+---@param heads table<integer, boolean>
 ---@param opts diffundo.DisplayOpts
 ---@param g diffundo.Glyphs
 ---@return table<integer, string>
-local function gutters_for(view, lane, open, opts, g)
+local function gutters_for(view, lane, open, heads, opts, g)
   local gutters = {}
   for i, r in ipairs(view) do
-    gutters[i] = gutter_for(i, lane, open[i], pip_for(r, opts, g))
+    gutters[i] = gutter_for(i, lane, open[i], pip_for(i, r, opts, g, heads))
   end
   return gutters
 end
@@ -716,7 +722,7 @@ end
 function M.display(view, opts)
   local g = opts.glyphs or glyphs.defaults
   local lane, open, heads = topology_for(view)
-  local gutters = gutters_for(view, lane, open, opts, g)
+  local gutters = gutters_for(view, lane, open, heads, opts, g)
   ---@type diffundo.Context
   local ctx = {
     view = view,

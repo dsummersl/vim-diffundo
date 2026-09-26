@@ -257,8 +257,8 @@ describe("history.display rows", function()
 
     assert.are.same({
       "╷ + foo()                   #3",
-      "╷ +0 lines                  #2",
-      "╷ +0 lines                  #1",
+      "│ +0 lines                  #2",
+      "│ +0 lines                  #1",
       "╷                           #0",
     }, display.lines)
     assert.are.same({ 1, 2, 3, 4 }, display.row_to_line)
@@ -276,11 +276,11 @@ describe("history.display rows", function()
 
     assert.matches("^@ ", display.lines[1])
     assert.matches("^w ", display.lines[2])
-    assert.matches("^╷ ", display.lines[3])
+    assert.matches("^│ ", display.lines[3])
     assert.matches("^w ", display.lines[4])
 
     local on_diff = history.display(rows, { width = 30, buffer = 4, current = 2 })
-    assert.matches("^╷ ", on_diff.lines[3])
+    assert.matches("^│ ", on_diff.lines[3])
 
     local same = history.display(rows, { width = 30, buffer = 3, current = 3 })
     assert.matches("^@ ", same.lines[2])
@@ -298,7 +298,7 @@ describe("history.display rows", function()
 
     assert.matches("^B ", display.lines[1])
     assert.matches("^ⓦ ", display.lines[2])
-    assert.matches("^╷ ", display.lines[3])
+    assert.matches("^│ ", display.lines[3])
   end)
 
   it("highlights the buffer's and the diff's rows", function()
@@ -327,7 +327,7 @@ describe("history.display rows", function()
     local plain = history.display(rows, { width = 30 })
     assert.matches("^╷ ", plain.lines[1])
     assert.matches("^├╯", plain.lines[2])
-    assert.matches("^╷ ", plain.lines[3])
+    assert.matches("^│ ", plain.lines[3])
 
     local current = history.display(rows, { width = 30, current = 3 })
     assert.matches("^├╯", current.lines[2])
@@ -346,10 +346,10 @@ describe("history.display rows", function()
 
     assert.matches("^╷", display.lines[1])
     assert.matches("^├╯", display.lines[2])
-    assert.matches("^╷", display.lines[3])
-    assert.matches("^╷", display.lines[4])
-    assert.matches("^╷", display.lines[5])
-    assert.matches("^╷", display.lines[6])
+    assert.matches("^│", display.lines[3])
+    assert.matches("^│", display.lines[4])
+    assert.matches("^│", display.lines[5])
+    assert.matches("^│", display.lines[6])
   end)
 
   it("keeps a long branch chain on one lane like the builtin undotree", function()
@@ -367,9 +367,9 @@ describe("history.display rows", function()
 
     assert.matches("^╷", display.lines[1])
     assert.matches("^├╯", display.lines[2])
-    assert.matches("^┊╷", display.lines[3])
+    assert.matches("^┊│", display.lines[3])
     assert.matches("^├╯", display.lines[4])
-    assert.matches("^╷", display.lines[5])
+    assert.matches("^│", display.lines[5])
   end)
 
   it("nests an alternate of an alternate to a third lane with pass-through", function()
@@ -389,7 +389,7 @@ describe("history.display rows", function()
     assert.matches("^┊├╯", display.lines[2])
     assert.matches("^┊├╯", display.lines[3])
     assert.matches("^├╯", display.lines[4])
-    assert.matches("^╷", display.lines[5])
+    assert.matches("^│", display.lines[5])
   end)
 
   it("keeps the newest chain on lane 1 when the trunk child is not first", function()
@@ -403,10 +403,10 @@ describe("history.display rows", function()
     local display = history.display(rows, { width = 30 })
 
     assert.matches("^╷", display.lines[1])
-    assert.matches("^╷", display.lines[2])
+    assert.matches("^│", display.lines[2])
     assert.matches("^├╯", display.lines[3])
-    assert.matches("^╷", display.lines[4])
-    assert.matches("^╷", display.lines[5])
+    assert.matches("^│", display.lines[4])
+    assert.matches("^│", display.lines[5])
   end)
 
   it("renders a written alternate with the write pip", function()
@@ -445,7 +445,7 @@ describe("history.display rows", function()
 
     assert.matches("^╷", display.lines[1])
     assert.matches("^├╯", display.lines[2])
-    assert.matches("^┊╷ %+0 lines", display.lines[3])
+    assert.matches("^┊│ %+0 lines", display.lines[3])
     assert.matches("^├╯", display.lines[7])
     assert.are.same({ { start = 3, stop = 6 } }, display.folds)
     assert.are.same({ [3] = "┆    4 undos 1w" }, display.captions)
@@ -501,7 +501,7 @@ describe("history.display collapsed", function()
     assert.are.same({
       "@ + line 12                    #12",
       "┆   7 undos 1w",
-      "╷ + line 4                      #4",
+      "│ + line 4                      #4",
       "┆   3 undos",
     }, display.lines)
     assert.are.same({ [1] = 1, [9] = 3 }, display.row_to_line)
@@ -519,7 +519,7 @@ describe("history.display collapsed", function()
     assert.are.same({
       "┆   2 undos",
       "@ + line 10                    #10",
-      "╷ + line 9                      #9",
+      "│ + line 9                      #9",
       "┆   8 undos",
     }, display.lines)
   end)
@@ -709,24 +709,24 @@ describe("history.display with the us.txt tree", function()
     local expected = {
       rendered("╷", "+1 -1 lines", 20),
       rendered("├╯", "+0 lines", 19),
-      rendered("╷", "+0 lines", 18),
-      rendered("╷", "+1 -1 lines", 17),
+      rendered("│", "+0 lines", 18),
+      rendered("│", "+1 -1 lines", 17),
       rendered("├╯", "+1 -1 lines", 16),
-      rendered("┊╷", "+1 -1 lines", 15),
-      rendered("┊╷", "- one", 14),
-      rendered("┊╷", "- two", 13),
-      rendered("┊╷", "- three", 12),
-      rendered("┊╷", "- six", 11),
-      rendered("┊╷", "- seven", 10),
-      rendered("┊╷", "- eight", 9),
-      rendered("┊╷", "- 7", 8),
-      rendered("┊╷", "- 8", 7),
+      rendered("┊│", "+1 -1 lines", 15),
+      rendered("┊│", "- one", 14),
+      rendered("┊│", "- two", 13),
+      rendered("┊│", "- three", 12),
+      rendered("┊│", "- six", 11),
+      rendered("┊│", "- seven", 10),
+      rendered("┊│", "- eight", 9),
+      rendered("┊│", "- 7", 8),
+      rendered("┊│", "- 8", 7),
       rendered("┊w", "- 9", 6),
       rendered("├╯", "- 10", 5),
       rendered("w", "-2 lines", 4),
-      rendered("╷", "+5 -2 lines", 3),
-      rendered("╷", "+5 -5 lines", 2),
-      rendered("╷", "+10 lines", 1),
+      rendered("│", "+5 -2 lines", 3),
+      rendered("│", "+5 -5 lines", 2),
+      rendered("│", "+10 lines", 1),
     }
 
     for i, line in ipairs(expected) do
@@ -940,21 +940,21 @@ describe("history.display with sibling branches", function()
       rendered("╷", "+1 -1 lines", 20),
       rendered("├╯", "+0 lines", 19),
       rendered("w", "+0 lines", 18),
-      rendered("╷", "+1 -1 lines", 17),
+      rendered("│", "+1 -1 lines", 17),
       rendered("├╯", "+1 -1 lines", 16),
       rendered("┊╷", "- 2 15 things that are", 15),
-      rendered("┊╷", "- B", 14),
-      rendered("┊╷", "- 2 15 things that are", 13),
-      rendered("┊╷", "- G", 12),
-      rendered("┊╷", "- 7", 11),
-      rendered("┊╷", "- 8", 10),
-      rendered("┊╷", "- 9", 9),
-      rendered("┊╷", "- 1 15 things that are", 8),
+      rendered("┊│", "- B", 14),
+      rendered("┊│", "- 2 15 things that are", 13),
+      rendered("┊│", "- G", 12),
+      rendered("┊│", "- 7", 11),
+      rendered("┊│", "- 8", 10),
+      rendered("┊│", "- 9", 9),
+      rendered("┊│", "- 1 15 things that are", 8),
       rendered("┊w", "- 10", 7),
-      rendered("┊╷", "- 11", 6),
+      rendered("┊│", "- 11", 6),
       rendered("├╯", "-2 lines", 5),
       rendered("w", "+5 -2 lines", 4),
-      rendered("╷", "+5 -5 lines", 3),
+      rendered("│", "+5 -5 lines", 3),
       rendered("w", "+10 lines", 2),
       rendered("w", "+1 -1 lines", 1),
     }
@@ -1072,7 +1072,7 @@ describe("history.display with real neovim undo shapes", function()
       "╷  + x                                #4",
       "├╯ + c                                #3",
       "├╯ + b                                #2",
-      "╷  +1 -1 lines                        #1",
+      "│  +1 -1 lines                        #1",
     })
   end)
 
@@ -1091,7 +1091,7 @@ describe("history.display with real neovim undo shapes", function()
       "├╯ + x                                #4",
       "┊╷ + c                                #3",
       "├╯ + b                                #2",
-      "╷  +1 -1 lines                        #1",
+      "│  +1 -1 lines                        #1",
     })
   end)
 

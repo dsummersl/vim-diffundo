@@ -95,11 +95,12 @@ the focus, so you can keep editing and keep pressing `.`:
 
 The title is the diff's state and its date; the footer is the size of the diff
 against your buffer. Each row is `lanes pip preview #seq`: the pip is `@` for
-your buffer's state, `w` for a written state, otherwise the tree lane; the
-diff's own row carries no separate pip, it's the one shown in bold. A buffer
-with no changes still opens, against `#0`, so you can leave the pane up and
-watch your edits pile up. It flips to the upper corner when your cursor would
-sit under it, and closes with the diff window.
+your buffer's state, `w` for a written state, otherwise the tree lane (`│`,
+shortened to `╷` at a branch's tip so it doesn't read as running into the row
+above it); the diff's own row carries no separate pip, it's the one shown in
+bold. A buffer with no changes still opens, against `#0`, so you can leave the
+pane up and watch your edits pile up. It flips to the upper corner when your
+cursor would sit under it, and closes with the diff window.
 
 `:Diffundo focus` expands the pane into the whole tree, using the same row
 format; branch stretches longer than `g:diffundo_fold_min` fold into
