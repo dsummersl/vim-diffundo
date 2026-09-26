@@ -39,8 +39,9 @@ RULE
 )" "${SRC[@]}"
 }
 
-REPORT=$(jq -rn --argjson fns "$(functions)" --argjson brs "$(branches)" \
+REPORT=$(jq -rn --slurpfile fns_in <(functions) --slurpfile brs_in <(branches) \
   --argjson maxcc "$MAX_COMPLEXITY" --argjson maxlines "$MAX_LINES" '
+  $fns_in[0] as $fns | $brs_in[0] as $brs |
   def span: .range.end.line - .range.start.line;
   def name: .lines | split("\n")[0] | ltrimstr(" ") | .[0:60];
   def contains($b): .file == $b.file

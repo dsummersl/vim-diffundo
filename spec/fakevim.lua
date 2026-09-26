@@ -112,10 +112,25 @@ local function chain(self, seq, siblings)
   return list
 end
 
+---@param self table
+---@return integer
+local function save_last(self)
+  local last = 0
+  for seq = 1, self.seq_last do
+    last = math.max(last, self.entries[seq].save or 0)
+  end
+  return last
+end
+
 function History:undotree()
   local kids = children(self, 0)
   local entries = kids[1] and chain(self, kids[1], tail(kids)) or {}
-  return { seq_last = self.seq_last, seq_cur = self.seq, entries = entries }
+  return {
+    seq_last = self.seq_last,
+    seq_cur = self.seq,
+    save_last = save_last(self),
+    entries = entries,
+  }
 end
 
 local Fake = {}
@@ -147,13 +162,15 @@ local function new_buffer(self, lines, name)
   local bufnr = self.next_bufnr
   self.next_bufnr = bufnr + 1
   self.buffers[bufnr] =
-    { number = bufnr, lines = copy(lines or {}), name = name or "", options = {} }
+    { number = bufnr, lines = copy(lines or {}), name = name or "", options = {}, tick = 1 }
   return bufnr
 end
 
 ---@param self table
 local function sync_source(self)
-  self.buffers[self.source_bn].lines = copy(self.history:lines())
+  local source = self.buffers[self.source_bn]
+  source.lines = copy(self.history:lines())
+  source.tick = source.tick + 1
 end
 
 ---@param self table
@@ -200,6 +217,13 @@ local function commands(self)
     end,
     delfold = function()
       self.folds = {}
+    end,
+    foldopen = function(_, first)
+      for _, found in ipairs(self.folds) do
+        if found.first == tonumber(first) then
+          found.open = true
+        end
+      end
     end,
     ["normal!"] = function(rest)
       if rest == "zE" then
@@ -282,6 +306,46 @@ local function api(self)
     nvim_buf_set_lines = function(bufnr, _, _, _, lines)
       local buf = bufnr == 0 and current_buffer(self).number or bufnr
       self.buffers[buf].lines = copy(lines)
+      self.buffers[buf].tick = self.buffers[buf].tick + 1
+    end,
+    nvim_buf_get_changedtick = function(bufnr)
+      return self.buffers[bufnr].tick
+    end,
+    nvim_win_get_height = function(win)
+      return window(self, win).height or 38
+    end,
+    nvim_win_get_width = function(win)
+      return window(self, win).width or 40
+    end,
+    nvim_create_augroup = function(name)
+      self.next_group = (self.next_group or 0) + 1
+      self.augroups[self.next_group] = name
+      return self.next_group
+    end,
+    nvim_del_augroup_by_id = function(id)
+      self.augroups[id] = nil
+      local kept = {}
+      for _, autocmd in ipairs(self.autocmds) do
+        if autocmd.group ~= id then
+          kept[#kept + 1] = autocmd
+        end
+      end
+      self.autocmds = kept
+    end,
+    nvim_create_autocmd = function(events, opts)
+      local list = type(events) == "table" and events or { events }
+      for _, event in ipairs(list) do
+        self.autocmds[#self.autocmds + 1] = {
+          event = event,
+          group = opts.group,
+          buffer = opts.buffer,
+          pattern = opts.pattern,
+          callback = opts.callback,
+        }
+      end
+    end,
+    nvim_set_hl = function(_, name, opts)
+      self.hl_groups[name] = opts
     end,
     nvim_buf_set_name = function(_, name)
       current_buffer(self).name = name
@@ -357,11 +421,12 @@ local function api(self)
     nvim_win_call = function(win, fn)
       local saved = self.current_win
       self.current_win = win
-      local ok, err = pcall(fn)
+      local ok, result = pcall(fn)
       self.current_win = saved
       if not ok then
-        error(err, 0)
+        error(result, 0)
       end
+      return result
     end,
   }
 end
@@ -375,6 +440,17 @@ local function fn(self)
     end,
     undotree = function()
       return self.history:undotree()
+    end,
+    winline = function()
+      return self.winline or 1
+    end,
+    foldclosed = function(line)
+      for _, found in ipairs(self.folds) do
+        if found.first <= line and line <= found.last and not found.open then
+          return found.first
+        end
+      end
+      return -1
     end,
   }
 end
@@ -417,6 +493,9 @@ function M.new(history, opts)
     winbar = "",
   }
   self.highlights = {}
+  self.hl_groups = {}
+  self.augroups = {}
+  self.autocmds = {}
   self.folds = {}
   self.log = { levels = { ERROR = 4, INFO = 2 } }
 
@@ -444,6 +523,9 @@ function M.new(history, opts)
   end
   self.fn.input = function()
     return ""
+  end
+  self.schedule = function(callback)
+    callback()
   end
   self.keycode = function(keys)
     return keys
@@ -522,6 +604,29 @@ function Fake:press(keys)
     error("no keymap for " .. keys .. " in buffer " .. buf, 0)
   end
   map()
+end
+
+---@param event string
+---@param opts { buffer?: integer, pattern?: string }|nil
+function Fake:fire(event, opts)
+  local options = opts or {}
+  for _, autocmd in ipairs(self.autocmds) do
+    local same_buffer = autocmd.buffer == nil or autocmd.buffer == options.buffer
+    local same_pattern = autocmd.pattern == nil or autocmd.pattern == options.pattern
+    if autocmd.event == event and same_buffer and same_pattern then
+      autocmd.callback()
+    end
+  end
+end
+
+---@return integer|nil
+function Fake:pane_window()
+  return self.t.diffundo_pane_win
+end
+
+---@return string[]
+function Fake:pane_lines()
+  return self.buffers[self.windows[self.t.diffundo_pane_win].buf].lines
 end
 
 ---@return string

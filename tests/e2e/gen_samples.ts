@@ -29,6 +29,23 @@ async function state(denops: Denops, lines: string[]): Promise<void> {
   await denops.cmd("let &undolevels = &undolevels");
 }
 
+async function paneLines(denops: Denops): Promise<string[]> {
+  const win = await denops.eval("get(t:, 'diffundo_pane_win', 0)") as number;
+  if (!win) return [];
+  const buf = await denops.call("nvim_win_get_buf", win) as number;
+  return await denops.call("nvim_buf_get_lines", buf, 0, -1, false) as string[];
+}
+
+async function paneLabels(denops: Denops): Promise<string> {
+  const win = await denops.eval("t:diffundo_pane_win") as number;
+  const config = plain(
+    await denops.call("nvim_win_get_config", win),
+  ) as { title: [string][]; footer: [string][] };
+  return `title=${JSON.stringify(config.title)} footer=${
+    JSON.stringify(config.footer)
+  }`;
+}
+
 async function show(
   denops: Denops,
   name: string,
@@ -38,64 +55,25 @@ async function show(
   console.log(`===== ${name} =====`);
   console.log(`--- undotree (source) seq_cur=${srcSeqCur} ---`);
   console.log(JSON.stringify(srcTree, null, 1));
-  const rows = plain(await denops.eval("t:diffundo_history_rows")) as unknown[];
-  console.log(`--- rows (seq parent save added removed) ---`);
-  for (
-    const r of rows as {
-      seq: number;
-      parent: number;
-      save: number | null;
-      added: string[];
-      removed: string[];
-    }[]
-  ) {
-    console.log(
-      `  ${r.seq} ${r.parent} ${
-        r.save ?? "-"
-      } +${r.added.length} -${r.removed.length} :: add=${
-        JSON.stringify(r.added)
-      } rem=${JSON.stringify(r.removed)}`,
-    );
-  }
 
-  const wins = await denops.call("nvim_list_wins") as number[];
-  const floats: { lines: string[]; height: number }[] = [];
-  for (const win of wins) {
-    const config = await denops.call("nvim_win_get_config", win) as Record<
-      string,
-      unknown
-    >;
-    if (config.relative !== "editor") continue;
-    const buf = await denops.call("nvim_win_get_buf", win) as number;
-    const lines = await denops.call(
-      "nvim_buf_get_lines",
-      buf,
-      0,
-      -1,
-      false,
-    ) as string[];
-    floats.push({ lines, height: config.height as number });
-  }
-  floats.sort((a, b) => a.height - b.height);
-  const footer = floats.find((f) =>
-    f.lines[f.lines.length - 1]?.endsWith("help: g?")
+  await denops.cmd("Diffundo focus");
+  const expanded = await paneLines(denops);
+  console.log(`--- expanded pane (${expanded.length} lines) ---`);
+  for (const l of expanded) console.log(`  |${l}|`);
+  console.log(`--- ${await paneLabels(denops)} ---`);
+  const captions = plain(
+    await denops.eval("get(t:, 'diffundo_pane_captions', {})"),
   );
-  const treeFloat = floats.find((f) => f !== footer);
-  console.log(`--- tree float (${treeFloat?.lines.length ?? 0} lines) ---`);
-  for (const l of treeFloat?.lines ?? []) console.log(`  |${l}|`);
-  console.log(`--- footer ---`);
-  for (const l of footer?.lines ?? []) console.log(`  |${l}|`);
+  console.log(`--- captions: ${JSON.stringify(captions)} ---`);
 
-  const disp = plain(await denops.eval("t:diffundo_history_display")) as {
-    folds: { start: number; stop: number }[];
-    captions: Record<string, string>;
-    row_to_line: number[];
-  };
-  console.log(`--- folds: ${JSON.stringify(disp?.folds ?? null)} ---`);
-  console.log(`--- captions: ${JSON.stringify(disp?.captions ?? null)} ---`);
+  await denops.call("feedkeys", "q", "x");
+  await denops.cmd("Diffundo earlier");
+  const collapsed = await paneLines(denops);
   console.log(
-    `--- row_to_line: ${JSON.stringify(disp?.row_to_line ?? null)} ---`,
+    `--- collapsed after :Diffundo earlier (${collapsed.length} lines) ---`,
   );
+  for (const l of collapsed) console.log(`  |${l}|`);
+  console.log(`--- ${await paneLabels(denops)} ---`);
   console.log();
 }
 
@@ -161,11 +139,11 @@ const scenarios: Scenario[] = [
       const path = await denops.call("tempname") as string;
       await denops.cmd(`edit ${path}`);
       await state(denops, ["a"]);
-      await denops.cmd("write");
+      await denops.cmd("silent write");
       await state(denops, ["a", "b"]);
-      await denops.cmd("write");
+      await denops.cmd("silent write");
       await state(denops, ["a", "b", "c"]);
-      await denops.cmd("write");
+      await denops.cmd("silent write");
       await denops.cmd("silent undo 1");
       await state(denops, ["a", "x"]);
     },
@@ -228,9 +206,8 @@ await withDenops("nvim", async (denops) => {
       unknown
     >;
     const srcSeqCur = await denops.eval("undotree().seq_cur") as number;
-    await denops.cmd("Diffundo history");
     await show(denops, scenario.name, srcTree, srcSeqCur);
-    await denops.cmd("Diffundo history");
+    await denops.cmd("only");
     await denops.cmd("enew!");
   }
 }, { prelude });

@@ -38,16 +38,18 @@ local function step_for(state)
 end
 
 ---@param from_seq integer
+---@param floor integer|nil
 ---@return fun(): diffundo.Step|nil
-function M.steps(from_seq)
+function M.steps(from_seq, floor)
   local states = tree.states(vim.fn.undotree())
+  local lowest = floor or -1
   local index = 0
   return function()
     repeat
       index = index + 1
     until states[index] == nil or states[index].seq < from_seq
     local state = states[index]
-    if state == nil then
+    if state == nil or state.seq <= lowest then
       return nil
     end
     return step_for(state)

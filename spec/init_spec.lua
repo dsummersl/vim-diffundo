@@ -4,6 +4,18 @@ local split = require("diffundo.split")
 
 local diffundo
 
+---@param commands string[]
+---@return string|nil
+local function after_last_undo(commands)
+  local found
+  for index, command in ipairs(commands) do
+    if command:match("^silent undo ") then
+      found = commands[index + 1]
+    end
+  end
+  return found
+end
+
 local function three_states()
   return fakevim.history({ {}, { "first" }, { "first", "second" }, { "first", "second", "third" } })
 end
@@ -44,7 +56,7 @@ describe("diffundo", function()
 
       assert.are_not.equal(diff_bn, vim.t.diffundo_diff_bn)
       assert.are.same({ "first", "second" }, vim:diff_buffer().lines)
-      assert.are.equal(2, #vim.win_order)
+      assert.are.equal(3, #vim.win_order)
     end)
 
     it("shows the previous undo state", function()
@@ -99,17 +111,16 @@ describe("diffundo", function()
       assert.are.equal(3, vim.history.seq)
       assert.are.same({ "first", "second", "third" }, vim:source_buffer().lines)
       assert.are.equal(vim.source_bn, vim:current_buffer().number)
-      assert.are.same("diffupdate", vim.commands[#vim.commands])
+      assert.are.equal("diffupdate", after_last_undo(vim.commands))
     end)
 
-    it("names and labels the diff buffer after the undo entry", function()
+    it("names the diff buffer after the undo entry without a label bar", function()
       split.open()
 
       diffundo.earlier()
 
-      local name = vim:diff_buffer().name
-      assert.matches("%- 2$", name)
-      assert.are.equal(name, vim:diff_window().options.statusline)
+      assert.matches("/#2$", vim:diff_buffer().name)
+      assert.is_nil(vim:diff_window().options.statusline)
       assert.is_nil(vim:diff_window().options.winbar)
     end)
   end)
@@ -157,14 +168,14 @@ describe("diffundo", function()
       end, "The diffundo source window is no longer open in this tab.")
     end)
 
-    it("notifies for a buffer without undo history", function()
+    it("diffs a buffer without undo history against #0", function()
       vim = fakevim.new(fakevim.history({ {} }))
       vim:install()
 
       diffundo.earlier()
 
-      assert.are.equal("No changes to view!", vim:last_notification())
-      assert.is_nil(vim.t.diffundo_diff_bn)
+      assert.are.equal(0, vim.t.diffundo_diff_undonr)
+      assert.are.same({ "@                                   #0" }, vim:pane_lines())
     end)
   end)
 
@@ -246,7 +257,7 @@ describe("diffundo", function()
 
       assert.are.equal(3, vim.history.seq)
       assert.are.same({ "first", "second", "third" }, vim:source_buffer().lines)
-      assert.are.same("diffupdate", vim.commands[#vim.commands])
+      assert.are.equal("diffupdate", after_last_undo(vim.commands))
     end)
 
     it("continues from the previous match", function()
@@ -292,7 +303,7 @@ describe("diffundo", function()
       vim:install()
 
       assert.is_nil(diffundo.search("x"))
-      assert.are.equal("No changes to view!", vim:last_notification())
+      assert.are.equal(0, vim.t.diffundo_diff_undonr)
     end)
 
     it("compiles the pattern before touching anything", function()
@@ -327,7 +338,7 @@ describe("diffundo", function()
       diffundo.command("nonesuch 1")
 
       assert.are.equal(
-        'diffundo: unknown subcommand "nonesuch" (earlier, later, search, search!, history)',
+        'diffundo: unknown subcommand "nonesuch" (earlier, later, search, search!, focus)',
         vim:last_notification()
       )
     end)
@@ -397,13 +408,13 @@ describe("diffundo", function()
       )
     end)
 
-    it("does not double-report a buffer without undo history", function()
+    it("reports no match once for a buffer without undo history", function()
       vim = fakevim.new(fakevim.history({ {} }))
       vim:install()
 
       diffundo.command("search x")
 
-      assert.are.same({ "No changes to view!" }, vim.notifications)
+      assert.are.same({ "diffundo: no state adds a line matching x" }, vim.notifications)
     end)
   end)
 
@@ -447,7 +458,7 @@ describe("diffundo", function()
   end)
 end)
 
-describe("the history float from commands", function()
+describe("the history pane from commands", function()
   local vim
 
   before_each(function()
@@ -457,48 +468,68 @@ describe("the history float from commands", function()
     vim:install()
   end)
 
-  it("opens by default after earlier and lands on the shown state", function()
+  it("opens collapsed after earlier and leaves the cursor in the source", function()
+    local source = vim.current_win
+
     diffundo.command("earlier")
 
     assert.are.equal(2, vim.t.diffundo_diff_undonr)
-    assert.are.equal(vim.t.diffundo_history_win, vim.current_win)
-    assert.are.same({ 2, 0 }, vim.windows[vim.t.diffundo_history_win].cursor)
+    assert.are.equal(source, vim.current_win)
+    assert.are.same({
+      "@ + third                           #3",
+      "○ + second                          #2",
+      "┆   1 undo",
+    }, vim:pane_lines())
   end)
 
-  it("the -no-history flag leaves the float closed", function()
-    diffundo.command("-no-history earlier")
+  it("follows each earlier so . can keep walking back", function()
+    diffundo.command("earlier")
+    diffundo.repeat_last()
 
-    assert.are.equal(2, vim.t.diffundo_diff_undonr)
-    assert.is_nil(vim.t.diffundo_history_win)
+    assert.are.same({
+      "@ + third                           #3",
+      "┆   1 undo",
+      "○ + first                           #1",
+    }, vim:pane_lines())
   end)
 
-  it("the -no-history flag leaves the float closed for a search hit", function()
-    diffundo.command("-no-history search first")
+  it("search narrows the pane to the matching states and footers the filter", function()
+    diffundo.command("search second")
 
-    assert.are.equal(1, vim.t.diffundo_diff_undonr)
-    assert.is_nil(vim.t.diffundo_history_win)
+    assert.are.same({
+      "┆   1 undo",
+      "○ + second                          #2",
+      "┆   1 undo",
+    }, vim:pane_lines())
+    local config = vim.windows[vim:pane_window()].config
+    assert.are.equal(" filter: second ", config.footer)
   end)
 
-  it("the g:diffundo_history option leaves the float closed for a search hit", function()
+  it("search! footers the removed-line filter and earlier clears it", function()
+    diffundo.command("search! nonesuch")
+    assert.are.equal(" filter!: nonesuch ", vim.windows[vim:pane_window()].config.footer)
+
+    diffundo.command("earlier")
+
+    assert.are.equal(" +1 -0 lines ", vim.windows[vim:pane_window()].config.footer)
+    assert.are.equal(3, #vim:pane_lines())
+  end)
+
+  it("stays closed when g:diffundo_history is false", function()
     vim.g.diffundo_history = false
 
     diffundo.command("search first")
 
     assert.are.equal(1, vim.t.diffundo_diff_undonr)
-    assert.is_nil(vim.t.diffundo_history_win)
+    assert.is_nil(vim:pane_window())
   end)
 
-  it("reveals a search hit at its row", function()
-    diffundo.command("search first")
-
-    assert.are.same({ 3, 0 }, vim.windows[vim.t.diffundo_history_win].cursor)
-  end)
-
-  it("history toggles and does not disturb the diff", function()
-    diffundo.command("earlier")
-    diffundo.command("-no-history later")
+  it("focus opens the split at the buffer's state and enters the expanded pane", function()
+    diffundo.command("focus")
 
     assert.are.equal(3, vim.t.diffundo_diff_undonr)
-    assert.are.equal(vim.t.diffundo_history_win, vim.current_win)
+    assert.are.same({ "first", "second", "third" }, vim:diff_buffer().lines)
+    assert.are.equal(vim:pane_window(), vim.current_win)
+    assert.are.equal(4, #vim:pane_lines())
   end)
 end)

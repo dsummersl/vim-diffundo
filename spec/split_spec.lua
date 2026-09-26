@@ -13,14 +13,13 @@ describe("split.open", function()
     vim:install()
   end)
 
-  it("refuses a buffer without undo history", function()
+  it("opens against #0 for a buffer without undo history", function()
     vim = fakevim.new(fakevim.history({ {} }))
     vim:install()
 
-    assert.is_false(split.open())
-    assert.are.equal("No changes to view!", vim:last_notification())
-    assert.are.equal(1, #vim.win_order)
-    assert.is_nil(vim.t.diffundo_diff_bn)
+    assert.is_true(split.open())
+    assert.are.equal(2, #vim.win_order)
+    assert.are.equal(0, vim.t.diffundo_diff_undonr)
   end)
 
   it("accepts history the buffer has already undone", function()
@@ -53,28 +52,15 @@ describe("split.open", function()
     assert.are.equal("diff", window.foldmethod)
   end)
 
-  it("labels the diff window with the buffer name", function()
-    split.open()
-
-    local window = vim:diff_window().options
-    assert.are.equal(vim:diff_buffer().name, window.statusline)
-    assert.matches("%- 3$", vim:diff_buffer().name)
-  end)
-
-  it("skips the winbar when the editor has none", function()
-    split.open()
-
-    local window = vim:diff_window().options
-    assert.is_nil(window.winbar)
-  end)
-
-  it("labels the winbar when the editor uses one", function()
+  it("names the diff buffer after the undo number without a statusline or winbar", function()
     vim.o.winbar = "%f"
 
     split.open()
 
     local window = vim:diff_window().options
-    assert.are.equal(vim:diff_buffer().name, window.winbar)
+    assert.are.equal("diffundo://" .. vim.source_bn .. "/#3", vim:diff_buffer().name)
+    assert.is_nil(window.statusline)
+    assert.is_nil(window.winbar)
   end)
 
   it("leaves the cursor in the source window", function()

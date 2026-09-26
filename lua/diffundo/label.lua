@@ -1,14 +1,5 @@
 local M = {}
 
-local spans = {
-  { 60 * 60 * 24 * 365, "y" },
-  { 60 * 60 * 24 * 30, "mo" },
-  { 60 * 60 * 24 * 7, "w" },
-  { 60 * 60 * 24, "d" },
-  { 60 * 60, "h" },
-  { 60, "m" },
-}
-
 ---@class diffundo.UndoEntry
 ---@field seq integer
 ---@field time integer
@@ -33,58 +24,33 @@ end
 
 ---@param undonr integer
 ---@return string
-function M.for_undonr(undonr)
-  if undonr == 0 then
-    return "{original} - 0"
-  end
-
-  local entry = M.find_entry(vim.fn.undotree().entries, undonr)
-  if entry == nil then
-    return "{unknown} - " .. undonr
-  end
-
-  return os.date("%Y-%m-%d %I:%M:%S %p", entry.time) .. " - " .. entry.seq
+function M.name(undonr)
+  return ("diffundo://%d/#%d"):format(vim.t.diffundo_source_bn or 0, undonr)
 end
 
 ---@param time integer
 ---@return string
-function M.relative(time)
-  local delta = os.time() - time
-  if delta < 60 then
-    return "just now"
+function M.date(time)
+  local format = vim.g.diffundo_date_format or "%Y-%m-%d %H:%M:%S"
+  if type(format) == "function" then
+    return format(time)
   end
-  for _, span in ipairs(spans) do
-    local count = math.floor(delta / span[1])
-    if count >= 1 then
-      return string.format("%d%s ago", count, span[2])
-    end
-  end
-  return "just now"
+  return tostring(os.date(format, time))
 end
 
+---@param seq integer
 ---@param time integer
 ---@return string
-function M.short(time)
-  local delta = os.time() - time
-  if delta < 60 then
-    return "now"
+function M.title(seq, time)
+  if seq == 0 then
+    return "#0"
   end
-  for _, span in ipairs(spans) do
-    local count = math.floor(delta / span[1])
-    if count >= 1 then
-      return count .. span[2]
-    end
-  end
-  return "now"
+  return "#" .. seq .. "  " .. M.date(time)
 end
 
----@param label string
-function M.apply(label)
-  vim.api.nvim_buf_set_name(0, label)
-  vim.wo.statusline = label
-  if vim.o.winbar ~= "" then
-    vim.wo.winbar = label
-  end
+---@param name string
+function M.apply(name)
+  pcall(vim.api.nvim_buf_set_name, 0, name)
 end
 
 return M

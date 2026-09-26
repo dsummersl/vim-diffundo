@@ -13,20 +13,22 @@ moving anything.
 ## Project Information
 
 - `make gen` runs `tests/e2e/gen_samples.ts`, which builds each sample undo
-  shape in a real headless nvim via RPC and prints `undotree()`, the computed
-  rows, and the exact rendered tree/footer/folds. That output is the ground
-  truth the golden busted tests and the e2e `assertRenderedTree` goldens are
-  derived from.
+  shape in a real headless nvim via RPC and prints `undotree()`, the expanded
+  and collapsed history pane lines, its border title/footer and fold captions.
+  That output is the ground truth the golden busted tests and the e2e pane
+  goldens are derived from.
 - A real nvim `:enew` buffer holds one empty line `[""]`, so the oldest state
   diffs `+1 -1 lines`; the fake models this with `{ "" }` as the original state.
 - Linear undo chains never fold; only off-trunk branch stretches longer than
-  `fold_min` (default 3) fold into `+N states` captions.
-- The sidebar snapshots the source's undo position in `t:diffundo_history_seq_cur`
-  at open; the tree float's scratch buffer otherwise reports `seq_cur=1`.
-- `:Diffundo history` opens two editor-relative floats (tree float + a 2-row
-  pinned footer); the tree float is focused and holds only row/caption lines.
-- e2e `stripTime()` normalizes the volatile relative time column
-  ("now - 3" -> "TIME-3") so line assertions are stable across machines.
+  `fold_min` (default 3) fold into `┆ N undos` captions in the expanded pane.
+- The history pane (`lua/diffundo/pane.lua`) is one float anchored to the diff
+  window (`relative = "win"`); it never takes the focus except through
+  `:Diffundo focus`. Its title/footer are the float's border `title`/`footer`.
+- Collapsed, the pane shows only the buffer's state (`@`) and the diff's state
+  with gap rows between; `history.display` does both via `opts.keep`.
+- State text and diff sizes are cached per source buffer in
+  `lua/diffundo/cache.lua`; rows are rebuilt incrementally from the newest
+  known row (`history.rows({ known = ... })`).
 
 ## Development Commands
 
@@ -81,7 +83,7 @@ Writing guidance:
 ## Project Structure
 
 ```
-plugin/              # :DiffEarlier / :DiffLater / :DiffSearch definitions
+plugin/              # the :Diffundo command and <Plug>(DiffundoRepeat)
 lua/diffundo/        # Main package source code
 spec/                # busted tests (mirror lua/diffundo/ structure, named *_spec.lua)
 tests/e2e/           # deno + denops.vim end-to-end test against a real neovim

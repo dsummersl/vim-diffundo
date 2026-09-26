@@ -1,6 +1,7 @@
-local label = require("diffundo.label")
+local glyphs = require("diffundo.glyphs")
 local lines = require("diffundo.lines")
 local restore = require("diffundo.restore")
+local tree = require("diffundo.tree")
 local walker = require("diffundo.walker")
 
 local M = {}
@@ -12,7 +13,6 @@ local M = {}
 ---@field added string[]
 ---@field removed string[]
 ---@field parent integer
----@field label string
 
 ---@class diffundo.Span
 ---@field line integer
@@ -28,26 +28,44 @@ local M = {}
 ---@field lines string[]
 ---@field spans diffundo.Span[]
 ---@field folds diffundo.Fold[]
----@field row_to_line integer[]
+---@field row_to_line table<integer, integer>
 ---@field captions table<integer, string>
----@field footer_start integer
 
 ---@class diffundo.DisplayBuf
 ---@field lines string[]
 ---@field spans diffundo.Span[]
 ---@field folds diffundo.Fold[]
----@field row_to_line integer[]
+---@field row_to_line table<integer, integer>
 ---@field captions table<integer, string>
 ---@field buf integer
 
-local older = {
+---@class diffundo.DisplayOpts
+---@field width integer
+---@field buffer integer|nil
+---@field current integer|nil
+---@field keep table<integer, boolean>|nil
+---@field fold_min integer|nil
+---@field glyphs diffundo.Glyphs|nil
+
+---@class diffundo.Context
+---@field view diffundo.Row[]
+---@field lane integer[]
+---@field heads table<integer, boolean>
+---@field gutters table<integer, string>
+---@field tree_w integer
+---@field seq_w integer
+---@field width integer
+---@field opts diffundo.DisplayOpts
+---@field glyphs diffundo.Glyphs
+
+---@type diffundo.Row
+M.original = {
   seq = 0,
   time = 0,
   save = nil,
   added = {},
   removed = {},
   parent = 0,
-  label = "",
 }
 
 ---@param a integer
@@ -92,16 +110,16 @@ local function name_hl(name)
   return nil
 end
 
----@param row diffundo.Row
+---@param added integer
+---@param removed integer
 ---@return string[]
-local function summary_names(row)
-  local a, r = #row.added, #row.removed
+local function summary_names(added, removed)
   local names = {}
-  if a > 0 then
-    names[#names + 1] = "+" .. a
+  if added > 0 then
+    names[#names + 1] = "+" .. added
   end
-  if r > 0 then
-    names[#names + 1] = "-" .. r
+  if removed > 0 then
+    names[#names + 1] = "-" .. removed
   end
   if #names == 0 then
     names[#names + 1] = "+0"
@@ -128,24 +146,15 @@ end
 ---@param row diffundo.Row
 ---@return string, { hl: string, from: integer, to: integer }[]
 local function preview_parts(row)
+  if row.seq == 0 then
+    return "", {}
+  end
   local text, spans, matched = single_edit(row)
   if matched then
     return text, spans
   end
-  local names = summary_names(row)
+  local names = summary_names(#row.added, #row.removed)
   return table.concat(names, " "), spans_for_names(names)
-end
-
----@param view diffundo.Row[]
----@return integer
-function M.time_width(view)
-  local longest = 1
-  for _, row in ipairs(view) do
-    if row.seq ~= 0 then
-      longest = math.max(longest, #(label.short(row.time) .. " - " .. row.seq))
-    end
-  end
-  return longest + 1
 end
 
 ---@param row diffundo.Row
@@ -357,22 +366,6 @@ local function topology_for(view)
   return lane, open, heads_for(view, seq_index)
 end
 
----@param is_current boolean
----@param save boolean
----@return string
-local function node_glyph(is_current, save)
-  if is_current then
-    if save then
-      return "◉"
-    end
-    return "○"
-  end
-  if save then
-    return "●"
-  end
-  return "│"
-end
-
 ---@param i integer
 ---@param lane integer[]
 ---@param other integer
@@ -392,20 +385,40 @@ local function junction_for(i, lane)
   return lane_gap(i, lane, i - 1) or lane_gap(i, lane, i + 1)
 end
 
+---@param r diffundo.Row
+---@param opts diffundo.DisplayOpts
+---@param g diffundo.Glyphs
+---@return string
+local function pip_for(r, opts, g)
+  if r.seq == opts.buffer then
+    return g.buffer
+  end
+  if r.save then
+    return g.write
+  end
+  if r.seq == opts.current then
+    return g.diff
+  end
+  return "│"
+end
+
+---@param pip string
+---@return string
+local function cap_for(pip)
+  if pip == "│" then
+    return "┘"
+  end
+  return pip
+end
+
 ---@param lane integer
 ---@param open_i table<integer, boolean>|nil
 ---@return string[]
 local function pass_columns(lane, open_i)
   local cells = {}
   for c = 1, lane - 1 do
-    if c == 1 then
+    if c == 1 or (open_i and open_i[c]) then
       cells[c] = "┊"
-    elseif open_i then
-      if open_i[c] then
-        cells[c] = "┊"
-      else
-        cells[c] = " "
-      end
     else
       cells[c] = " "
     end
@@ -416,19 +429,18 @@ end
 ---@param i integer
 ---@param lane integer[]
 ---@param open_i table<integer, boolean>|nil
----@param is_current boolean
----@param save boolean
+---@param pip string
 ---@return string
-local function gutter_for(i, lane, open_i, is_current, save)
+local function gutter_for(i, lane, open_i, pip)
   local cells = pass_columns(lane[i], open_i)
   if junction_for(i, lane) then
     for c = 1, lane[i] - 2 do
       cells[c] = "┊"
     end
     cells[lane[i] - 1] = "├"
-    cells[lane[i]] = "┘"
+    cells[lane[i]] = cap_for(pip)
   else
-    cells[lane[i]] = node_glyph(is_current, save)
+    cells[lane[i]] = pip
   end
   return table.concat(cells, "")
 end
@@ -453,8 +465,9 @@ end
 
 ---@param s string
 ---@param budget integer
+---@param ellipsis string
 ---@return string
-local function truncate_cells(s, budget)
+local function truncate_cells(s, budget, ellipsis)
   if cell_width(s) <= budget then
     return s
   end
@@ -470,141 +483,7 @@ local function truncate_cells(s, budget)
     end
     out[#out + 1] = s:sub(i, i)
   end
-  return table.concat(out, "") .. "…"
-end
-
----@param view diffundo.Row[]
----@param i integer
----@param gutters string[]
----@param tree_w integer
----@param time_w integer
----@param width integer
----@return string, diffundo.Span[]
-local function row_line(view, i, gutters, tree_w, time_w, width)
-  local r = view[i]
-  local gutter = gutters[i]
-  local tree = gutter .. string.rep(" ", tree_w - cell_width(gutter) + 1)
-  local preview, marks = preview_parts(r)
-  local time = label.short(r.time) .. " - " .. r.seq
-  local body_w = width - tree_w - 1 - time_w
-  if cell_width(preview) > body_w then
-    preview = truncate_cells(preview, math.max(0, body_w))
-    marks = {}
-  end
-  local line = tree
-    .. preview
-    .. string.rep(" ", math.max(0, body_w - cell_width(preview)))
-    .. string.rep(" ", math.max(0, time_w - cell_width(time)))
-    .. time
-  local spans = {}
-  local base = #tree
-  for _, mark in ipairs(marks) do
-    spans[#spans + 1] = {
-      line = 0,
-      hl = mark.hl,
-      col_start = base + mark.from,
-      col_end = base + mark.to,
-    }
-  end
-  return line, spans
-end
-
----@param view diffundo.Row[]
----@param first integer
----@param count integer
----@return string
-local function caption_text(view, first, count)
-  local added, removed = 0, 0
-  for offset = 0, count - 1 do
-    added = added + #view[first + offset].added
-    removed = removed + #view[first + offset].removed
-  end
-  return string.format("+%d states: +%d -%d lines %d undos", count, added, removed, count)
-end
-
----@param index integer
----@param size integer
----@return integer
-local function clamp_index(index, size)
-  if index < 1 then
-    return 1
-  end
-  if index > size then
-    return size
-  end
-  return index
-end
-
----@param r diffundo.Row
----@param current integer|nil
----@return string
-local function meaning_for(r, current)
-  if current == r.seq then
-    if r.save then
-      return "◉ saved"
-    end
-    return "○"
-  end
-  if r.save then
-    return "● saved"
-  end
-  return ""
-end
-
----@param r diffundo.Row
----@param current integer|nil
----@param width integer
----@return string
-local function status_line(r, current, width)
-  local absolute = os.date("%Y-%m-%d %I:%M:%S %p", r.time)
-  local text = ("#%d %s %s +%d -%d"):format(
-    r.seq,
-    meaning_for(r, current),
-    absolute,
-    #r.added,
-    #r.removed
-  )
-  if cell_width(text) > width then
-    return truncate_cells(text, math.max(0, width))
-  end
-  return text
-end
-
----@param shown integer
----@param total integer
----@param width integer
----@return string
-local function pager_line(shown, total, width)
-  local hint = "help: g?"
-  local text = ("%d/%d"):format(shown, total)
-  return text .. string.rep(" ", math.max(0, width - #text - #hint)) .. hint
-end
-
----@param view diffundo.Row[]
----@return integer
-local function visible_count(view)
-  local shown = 0
-  for _, r in ipairs(view) do
-    if r.seq ~= 0 then
-      shown = shown + 1
-    end
-  end
-  return shown
-end
-
----@param view diffundo.Row[]
----@param opts { selected?: integer, total?: integer, current?: integer }
----@param width integer
----@return string[]
-local function footer_lines(view, opts, width)
-  local shown = visible_count(view)
-  local total = opts.total or shown
-  if #view == 0 then
-    return { "no matches", pager_line(0, total, width) }
-  end
-  local index = clamp_index(opts.selected or 1, #view)
-  local r = view[index]
-  return { status_line(r, opts.current, width), pager_line(shown, total, width) }
+  return table.concat(out, "") .. ellipsis
 end
 
 ---@param view diffundo.Row[]
@@ -633,122 +512,239 @@ local function standalone(i, lane, heads)
 end
 
 ---@param view diffundo.Row[]
----@param index integer
----@param gutters string[]
----@param tree_w integer
----@param time_w integer
----@param width integer
+---@param lane integer[]
+---@param open table<integer, table<integer, boolean>>
+---@param opts diffundo.DisplayOpts
+---@param g diffundo.Glyphs
+---@return table<integer, string>
+local function gutters_for(view, lane, open, opts, g)
+  local gutters = {}
+  for i, r in ipairs(view) do
+    gutters[i] = gutter_for(i, lane, open[i], pip_for(r, opts, g))
+  end
+  return gutters
+end
+
+---@param view diffundo.Row[]
+---@param gutters table<integer, string>
+---@param keep table<integer, boolean>|nil
+---@return integer
+local function tree_width(view, gutters, keep)
+  local width = 1
+  for i, r in ipairs(view) do
+    if keep == nil or keep[r.seq] then
+      width = math.max(width, cell_width(gutters[i]))
+    end
+  end
+  return width
+end
+
+---@param view diffundo.Row[]
+---@return integer
+local function seq_width(view)
+  local width = 2
+  for _, r in ipairs(view) do
+    width = math.max(width, #("#" .. r.seq))
+  end
+  return width
+end
+
+---@param r diffundo.Row
+---@param opts diffundo.DisplayOpts
+---@return string|nil
+local function row_hl(r, opts)
+  if r.seq == opts.buffer then
+    return "DiffundoBuffer"
+  end
+  if r.seq == opts.current then
+    return "DiffundoDiff"
+  end
+  return nil
+end
+
 ---@param state diffundo.DisplayBuf
-local function emit_row(view, index, gutters, tree_w, time_w, width, state)
-  local text, row_spans = row_line(view, index, gutters, tree_w, time_w, width)
-  state.row_to_line[index] = state.buf
+---@param text string
+---@param spans diffundo.Span[]
+local function emit_line(state, text, spans)
   state.lines[state.buf] = text
-  for _, span in ipairs(row_spans) do
+  for _, span in ipairs(spans) do
     span.line = state.buf - 1
     state.spans[#state.spans + 1] = span
   end
   state.buf = state.buf + 1
 end
 
+---@param ctx diffundo.Context
+---@param i integer
+---@return string, diffundo.Span[]
+local function row_line(ctx, i)
+  local r = ctx.view[i]
+  local gutter = ctx.gutters[i]
+  local prefix = gutter .. string.rep(" ", ctx.tree_w - cell_width(gutter) + 1)
+  local preview, marks = preview_parts(r)
+  local seq = "#" .. r.seq
+  local body_w = math.max(0, ctx.width - ctx.tree_w - 1 - ctx.seq_w - 1)
+  if cell_width(preview) > body_w then
+    preview = truncate_cells(preview, body_w, ctx.glyphs.ellipsis)
+    marks = {}
+  end
+  local pad = body_w - cell_width(preview) + 1 + ctx.seq_w - #seq
+  local line = prefix .. preview .. string.rep(" ", pad) .. seq
+  local spans = {}
+  local hl = row_hl(r, ctx.opts)
+  if hl then
+    spans[1] = { line = 0, hl = hl, col_start = 0, col_end = #line }
+  end
+  for _, mark in ipairs(marks) do
+    spans[#spans + 1] =
+      { line = 0, hl = mark.hl, col_start = #prefix + mark.from, col_end = #prefix + mark.to }
+  end
+  return line, spans
+end
+
+---@param ctx diffundo.Context
+---@param count integer
+---@param writes integer
+---@return string
+local function caption_text(ctx, count, writes)
+  local text = ctx.glyphs.gap .. string.rep(" ", ctx.tree_w + 2) .. count .. " undo"
+  if count ~= 1 then
+    text = text .. "s"
+  end
+  if writes > 0 then
+    text = text .. " " .. writes .. ctx.glyphs.write
+  end
+  return text
+end
+
 ---@param view diffundo.Row[]
+---@param first integer
+---@param last integer
+---@return integer
+local function writes_in(view, first, last)
+  local writes = 0
+  for index = first, last do
+    if view[index].save then
+      writes = writes + 1
+    end
+  end
+  return writes
+end
+
+---@param ctx diffundo.Context
+---@param index integer
+---@param state diffundo.DisplayBuf
+local function emit_row(ctx, index, state)
+  local text, spans = row_line(ctx, index)
+  state.row_to_line[index] = state.buf
+  emit_line(state, text, spans)
+end
+
+---@param ctx diffundo.Context
 ---@param i integer
 ---@param run_end integer
----@param fold_min integer
----@param gutters string[]
----@param tree_w integer
----@param time_w integer
----@param width integer
 ---@param state diffundo.DisplayBuf
 ---@return integer
-local function emit_run(view, i, run_end, fold_min, gutters, tree_w, time_w, width, state)
+local function emit_run(ctx, i, run_end, state)
   local run_len = run_end - i + 1
-  if run_len > fold_min then
-    local start = state.buf
-    for index = i, run_end do
-      emit_row(view, index, gutters, tree_w, time_w, width, state)
-    end
-    state.folds[#state.folds + 1] = { start = start, stop = start + run_len - 1 }
-    state.captions[start] = caption_text(view, i, run_len)
-    return run_end + 1
+  if run_len <= (ctx.opts.fold_min or 3) then
+    emit_row(ctx, i, state)
+    return i + 1
   end
-  emit_row(view, i, gutters, tree_w, time_w, width, state)
-  return i + 1
+  local start = state.buf
+  for index = i, run_end do
+    emit_row(ctx, index, state)
+  end
+  state.folds[#state.folds + 1] = { start = start, stop = start + run_len - 1 }
+  state.captions[start] = caption_text(ctx, run_len, writes_in(ctx.view, i, run_end))
+  return run_end + 1
 end
 
----@param view diffundo.Row[]
----@param lane integer[]
----@param open table<integer, table<integer, boolean>>
----@param current integer|nil
----@return string[], integer
-local function gutters_for(view, lane, open, current)
-  local gutters = {}
-  local tree_w = 1
-  for i = 1, #view do
-    if view[i].seq ~= 0 then
-      local gutter = gutter_for(i, lane, open[i], view[i].seq == current, view[i].save ~= nil)
-      gutters[i] = gutter
-      tree_w = math.max(tree_w, cell_width(gutter))
-    end
-  end
-  return gutters, tree_w
-end
-
----@param buf_lines string[]
----@param footer string[]
----@param height integer|nil
----@return integer
-local function append_footer(buf_lines, footer, height)
-  local padding = 0
-  if height then
-    padding = math.max(0, height - (#buf_lines + #footer))
-  end
-  local footer_start = #buf_lines + padding + 1
-  for _ = 1, padding do
-    buf_lines[#buf_lines + 1] = ""
-  end
-  for _, line in ipairs(footer) do
-    buf_lines[#buf_lines + 1] = line
-  end
-  return footer_start
-end
-
----@param view diffundo.Row[]
----@param opts { current?: integer, width: integer, selected?: integer, total?: integer, fold_min?: integer, height?: integer }
----@return diffundo.Display
-function M.display(view, opts)
-  local width = opts.width
-  local lane, open, heads = topology_for(view)
-  local gutters, tree_w = gutters_for(view, lane, open, opts.current)
-  local time_w = M.time_width(view)
-  local fold_min = opts.fold_min or 3
-  local state = {
-    lines = {},
-    spans = {},
-    folds = {},
-    row_to_line = {},
-    captions = {},
-    buf = 1,
-  }
+---@param ctx diffundo.Context
+---@param state diffundo.DisplayBuf
+local function expanded(ctx, state)
   local i = 1
-  while i <= #view do
-    if view[i].seq == 0 then
-      i = i + 1
-    elseif standalone(i, lane, heads) then
-      emit_row(view, i, gutters, tree_w, time_w, width, state)
+  while i <= #ctx.view do
+    if standalone(i, ctx.lane, ctx.heads) then
+      emit_row(ctx, i, state)
       i = i + 1
     else
-      local run_end = run_end_for(view, i, lane)
-      i = emit_run(view, i, run_end, fold_min, gutters, tree_w, time_w, width, state)
+      i = emit_run(ctx, i, run_end_for(ctx.view, i, ctx.lane), state)
     end
   end
-  local footer_start = append_footer(state.lines, footer_lines(view, opts, width), opts.height)
+end
+
+---@param acc { n: integer, w: integer }
+---@param r diffundo.Row
+local function tally(acc, r)
+  if r.seq == 0 then
+    return
+  end
+  acc.n = acc.n + 1
+  if r.save then
+    acc.w = acc.w + 1
+  end
+end
+
+---@param ctx diffundo.Context
+---@param state diffundo.DisplayBuf
+---@param acc { n: integer, w: integer }
+local function flush(ctx, state, acc)
+  if acc.n > 0 then
+    local text = caption_text(ctx, acc.n, acc.w)
+    emit_line(state, text, { { line = 0, hl = "DiffundoGap", col_start = 0, col_end = #text } })
+  end
+  acc.n, acc.w = 0, 0
+end
+
+---@param ctx diffundo.Context
+---@param state diffundo.DisplayBuf
+---@param keep table<integer, boolean>
+local function collapsed(ctx, state, keep)
+  local acc = { n = 0, w = 0 }
+  for i, r in ipairs(ctx.view) do
+    if keep[r.seq] then
+      flush(ctx, state, acc)
+      emit_row(ctx, i, state)
+    else
+      tally(acc, r)
+    end
+  end
+  flush(ctx, state, acc)
+end
+
+---@param view diffundo.Row[]
+---@param opts diffundo.DisplayOpts
+---@return diffundo.Display
+function M.display(view, opts)
+  local g = opts.glyphs or glyphs.defaults
+  local lane, open, heads = topology_for(view)
+  local gutters = gutters_for(view, lane, open, opts, g)
+  ---@type diffundo.Context
+  local ctx = {
+    view = view,
+    lane = lane,
+    heads = heads,
+    gutters = gutters,
+    tree_w = tree_width(view, gutters, opts.keep),
+    seq_w = seq_width(view),
+    width = opts.width,
+    opts = opts,
+    glyphs = g,
+  }
+  ---@type diffundo.DisplayBuf
+  local state = { lines = {}, spans = {}, folds = {}, row_to_line = {}, captions = {}, buf = 1 }
+  if opts.keep then
+    collapsed(ctx, state, opts.keep)
+  else
+    expanded(ctx, state)
+  end
   return {
     lines = state.lines,
     spans = state.spans,
     folds = state.folds,
     row_to_line = state.row_to_line,
     captions = state.captions,
-    footer_start = footer_start,
   }
 end
 
@@ -762,25 +758,71 @@ function M.row_for(step)
     added = step.added,
     removed = step.removed,
     parent = step.parent,
-    label = label.relative(step.time) .. " - " .. step.seq,
   }
 end
 
----@param opts { limit?: integer }
+---@param rows diffundo.Row[]
+local function refresh_saves(rows)
+  local saves = {}
+  for _, state in ipairs(tree.states(vim.fn.undotree())) do
+    saves[state.seq] = state.save
+  end
+  for _, row in ipairs(rows) do
+    row.save = saves[row.seq]
+  end
+end
+
+---@param opts { on_lines?: fun(seq: integer, lines: string[]) }
+---@param step diffundo.Step
+local function remember(opts, step)
+  if opts.on_lines then
+    opts.on_lines(step.seq, step.lines)
+    opts.on_lines(step.parent, step.parent_lines)
+  end
+end
+
+---@param known diffundo.Row[]
+---@return integer
+local function newest_known(known)
+  local first = known[1]
+  if first == nil or first.seq > vim.fn.undotree().seq_last then
+    return -1
+  end
+  return first.seq
+end
+
+---@param fresh diffundo.Row[]
+---@param known diffundo.Row[]
+---@param newest integer
+---@return diffundo.Row[]
+local function merged(fresh, known, newest)
+  if newest < 0 then
+    fresh[#fresh + 1] = M.original
+    return fresh
+  end
+  for _, row in ipairs(known) do
+    fresh[#fresh + 1] = row
+  end
+  return fresh
+end
+
+---@param opts { limit?: integer, known?: diffundo.Row[], on_lines?: fun(seq: integer, lines: string[]) }
 ---@return diffundo.Row[]
 function M.rows(opts)
   local limit = opts.limit or 500
+  local fresh = {}
   local collected = {}
   restore.within_source(function()
-    local count = 0
-    for step in walker.steps(vim.fn.undotree().seq_last + 1) do
-      if count == limit then
-        table.insert(collected, older)
+    local newest = newest_known(opts.known or {})
+    for step in walker.steps(vim.fn.undotree().seq_last + 1, newest) do
+      if #fresh == limit then
         break
       end
-      table.insert(collected, M.row_for(step))
-      count = count + 1
+      remember(opts, step)
+      fresh[#fresh + 1] = M.row_for(step)
     end
+    collected = merged(fresh, opts.known or {}, newest)
+    refresh_saves(collected)
   end)
   return collected
 end
