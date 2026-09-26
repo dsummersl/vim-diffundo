@@ -126,7 +126,7 @@ describe("pane.render", function()
     assert.is_true(#vim.highlights > 0)
     assert.are.same({ link = "Comment", default = true }, vim.hl_groups.DiffundoGap)
     assert.are.same(
-      { link = "CursorLine", bold = true, default = true },
+      { bold = true, default = true, cterm = { bold = true } },
       vim.hl_groups.DiffundoDiff
     )
     assert.are.same({ bold = true, default = true }, vim.hl_groups.DiffundoBuffer)
