@@ -59,6 +59,20 @@ describe("diffundo", function()
       assert.are.equal(3, #vim.win_order)
     end)
 
+    it("replaces a stale split and its pane instead of stacking another", function()
+      diffundo.earlier()
+      local pane = vim:pane_window()
+      local diff_bn = vim.t.diffundo_diff_bn
+      vim.cmd("enew")
+
+      diffundo.earlier()
+
+      assert.is_nil(vim:window_of_buffer(diff_bn))
+      assert.are_not.equal(pane, vim:pane_window())
+      assert.is_nil(vim.windows[pane])
+      assert.are.equal(3, #vim.win_order)
+    end)
+
     it("shows the previous undo state", function()
       split.open()
 

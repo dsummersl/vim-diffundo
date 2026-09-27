@@ -53,6 +53,11 @@ function M.place(lines, undonr)
   label.apply(label.name(undonr))
 end
 
+local function diff_window()
+  vim.cmd("diffthis")
+  vim.wo.foldlevel = 0
+end
+
 local function new_buffer()
   local filetype = vim.bo.filetype
   local undonr = vim.fn.changenr()
@@ -60,18 +65,17 @@ local function new_buffer()
 
   vim.cmd("enew")
   vim.t.diffundo_diff_bn = vim.api.nvim_get_current_buf()
+  vim.t.diffundo_diff_win = vim.api.nvim_get_current_win()
   vim.bo.filetype = filetype
   vim.bo.buftype = "nofile"
   vim.bo.bufhidden = "wipe"
   vim.bo.swapfile = false
-  vim.wo.diff = true
-  vim.wo.scrollbind = true
-  vim.wo.cursorbind = true
-  vim.wo.foldmethod = "diff"
+  diff_window()
   vim.bo.readonly = true
   label.apply(label.name(undonr))
 
   M.focus(true)
+  diff_window()
 end
 
 local function leave_stale_diff_window()
@@ -88,24 +92,51 @@ local function leave_stale_diff_window()
   vim.api.nvim_set_current_win(source_win)
 end
 
-function M.close()
-  if not M.is_open() then
+---@return boolean
+local function targets_current()
+  local buf = vim.api.nvim_get_current_buf()
+  return buf == vim.t.diffundo_source_bn
+    or buf == vim.t.diffundo_diff_bn
+    or vim.api.nvim_get_current_win() == vim.t.diffundo_pane_win
+end
+
+---@param win integer
+local function diff_off(win)
+  vim.api.nvim_win_call(win, function()
+    vim.cmd("diffoff")
+  end)
+end
+
+local function release_diff_window()
+  local diff_win = vim.t.diffundo_diff_win
+  if diff_win == nil or not vim.api.nvim_win_is_valid(diff_win) then
     return
   end
 
-  local diff_win = M.window_of_buffer(vim.t.diffundo_diff_bn)
-  if diff_win ~= nil then
+  if vim.api.nvim_win_get_buf(diff_win) == vim.t.diffundo_diff_bn then
     vim.api.nvim_win_close(diff_win, true)
+  else
+    diff_off(diff_win)
+  end
+end
+
+function M.close()
+  release_diff_window()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_get_buf(win) == vim.t.diffundo_source_bn then
+      diff_off(win)
+    end
   end
 end
 
 ---@return boolean
 function M.open()
-  if M.is_open() then
-    return true
+  if M.is_open() and targets_current() then
+    return false
   end
 
   leave_stale_diff_window()
+  M.close()
 
   vim.t.diffundo_source_bn = vim.api.nvim_get_current_buf()
   vim.cmd("vert diffsplit")

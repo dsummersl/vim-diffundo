@@ -198,6 +198,16 @@ local function commands(self)
       sync_source(self)
     end,
     diffupdate = function() end,
+    diffthis = function()
+      local options = self.windows[self.current_win].options
+      options.diff = true
+      options.scrollbind = true
+      options.cursorbind = true
+      options.foldmethod = "diff"
+    end,
+    diffoff = function()
+      self.windows[self.current_win].options.diff = false
+    end,
     enew = function()
       self.windows[self.current_win].buf = new_buffer(self)
     end,
