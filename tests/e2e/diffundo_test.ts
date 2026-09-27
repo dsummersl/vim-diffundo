@@ -676,7 +676,7 @@ test({
     // WHY: the pane re-renders on a scheduled callback.
     await denops.call("wait", 100, "v:false");
     assertEquals(await paneLines(denops), [
-      "@ +1 -1 lines                         #1",
+      "@ ~ hello                             #1",
       "╷                                     #0",
     ]);
     assertEquals((await paneLabels(denops)).footer, " +1 -1 lines ");
@@ -717,7 +717,7 @@ test({
 
     await assertExpanded(denops, [
       "@ + two                               #2",
-      "│ +1 -1 lines                         #1",
+      "│ ~ one                               #1",
       "╷                                     #0",
     ]);
     assertEquals(await denops.eval("t:diffundo_diff_undonr"), 2);
@@ -836,7 +836,7 @@ test({
       "├╯ + x                                #4",
       "┊╷ + c                                #3",
       "├╯ + b                                #2",
-      "│  +1 -1 lines                        #1",
+      "│  ~ a                                #1",
       "╷                                     #0",
     ]);
 
@@ -871,7 +871,7 @@ test({
       "@  + x                                #4",
       "├w + c                                #3",
       "├w + b                                #2",
-      "w  +1 -1 lines                        #1",
+      "w  ~ a                                #1",
       "╷                                     #0",
     ]);
 
@@ -901,7 +901,7 @@ test({
     assertEquals(await paneLines(denops), [
       "┆    2 undos",
       "├@ + b                                #2",
-      "│  +1 -1 lines                        #1",
+      "│  ~ a                                #1",
     ]);
   },
 });

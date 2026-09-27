@@ -67,6 +67,13 @@ describe("history.preview_parts", function()
     assert.are.equal("DiffDelete", spans[1].hl)
   end)
 
+  it("shows a single-line replacement colored DiffChange", function()
+    local text, spans = history.preview_parts(row({ added = { "bar()" }, removed = { "foo()" } }))
+
+    assert.are.equal("~ bar()", text)
+    assert.are.equal("DiffChange", spans[1].hl)
+  end)
+
   it("shows counts with the lines unit for mixed changes", function()
     local text, spans = history.preview_parts(row({ added = { "a", "b" }, removed = { "c" } }))
 
@@ -707,12 +714,12 @@ describe("history.display with the us.txt tree", function()
     local display = history.display(rows, { width = width, current = 20 })
 
     local expected = {
-      rendered("╷", "+1 -1 lines", 20),
+      rendered("╷", "~ 06", 20),
       rendered("├╯", "+0 lines", 19),
       rendered("│", "+0 lines", 18),
-      rendered("│", "+1 -1 lines", 17),
-      rendered("├╯", "+1 -1 lines", 16),
-      rendered("┊│", "+1 -1 lines", 15),
+      rendered("│", "~ SIX", 17),
+      rendered("├╯", "~ final", 16),
+      rendered("┊│", "~ 15", 15),
       rendered("┊│", "- one", 14),
       rendered("┊│", "- two", 13),
       rendered("┊│", "- three", 12),
@@ -937,11 +944,11 @@ describe("history.display with sibling branches", function()
     local display = history.display(rows, { width = width, current = 18 })
 
     local expected = {
-      rendered("╷", "+1 -1 lines", 20),
+      rendered("╷", "~ Q", 20),
       rendered("├╯", "+0 lines", 19),
       rendered("w", "+0 lines", 18),
-      rendered("│", "+1 -1 lines", 17),
-      rendered("├╯", "+1 -1 lines", 16),
+      rendered("│", "~ W", 17),
+      rendered("├╯", "~ Z", 16),
       rendered("┊╷", "- 2 15 things that are", 15),
       rendered("┊│", "- B", 14),
       rendered("┊│", "- 2 15 things that are", 13),
@@ -956,7 +963,7 @@ describe("history.display with sibling branches", function()
       rendered("w", "+5 -2 lines", 4),
       rendered("│", "+5 -5 lines", 3),
       rendered("w", "+10 lines", 2),
-      rendered("w", "+1 -1 lines", 1),
+      rendered("w", "~ 1", 1),
     }
 
     for i, line in ipairs(expected) do
@@ -1072,7 +1079,7 @@ describe("history.display with real neovim undo shapes", function()
       "╷  + x                                #4",
       "├╯ + c                                #3",
       "├╯ + b                                #2",
-      "│  +1 -1 lines                        #1",
+      "│  ~ a                                #1",
     })
   end)
 
@@ -1091,7 +1098,7 @@ describe("history.display with real neovim undo shapes", function()
       "├╯ + x                                #4",
       "┊╷ + c                                #3",
       "├╯ + b                                #2",
-      "│  +1 -1 lines                        #1",
+      "│  ~ a                                #1",
     })
   end)
 
@@ -1103,8 +1110,8 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 2 })
 
     assert_tree_lines(display, {
-      "╷ +1 -1 lines                         #2",
-      "╷ +1 -1 lines                         #1",
+      "╷ ~ z                                 #2",
+      "╷ ~ a                                 #1",
     })
   end)
 
@@ -1121,7 +1128,7 @@ describe("history.display with real neovim undo shapes", function()
       "╷  + x                                #4",
       "├w + c                                #3",
       "├w + b                                #2",
-      "w  +1 -1 lines                        #1",
+      "w  ~ a                                #1",
     })
   end)
 
