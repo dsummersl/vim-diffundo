@@ -1,3 +1,4 @@
+local excerpt = require("diffundo.excerpt")
 local glyphs = require("diffundo.glyphs")
 local lines = require("diffundo.lines")
 local restore = require("diffundo.restore")
@@ -90,8 +91,9 @@ local function lone_replaced(a, r)
 end
 
 ---@param row diffundo.Row
----@return string, { hl: string, from: integer, to: integer }[], boolean
-local function single_edit(row)
+---@param ellipsis string
+---@return string, diffundo.Mark[], boolean
+local function single_edit(row, ellipsis)
   local a, r = #row.added, #row.removed
   if lone_added(a, r) then
     local text = "+ " .. row.added[1]
@@ -102,8 +104,8 @@ local function single_edit(row)
     return text, { { hl = "DiffDelete", from = 0, to = #text } }, true
   end
   if lone_replaced(a, r) then
-    local text = "~ " .. row.added[1]
-    return text, { { hl = "DiffChange", from = 0, to = #text } }, true
+    local text, marks = excerpt.changed(row.removed[1], row.added[1], ellipsis)
+    return text, marks, true
   end
   return "", {}, false
 end
@@ -140,7 +142,7 @@ local function summary_names(added, removed)
 end
 
 ---@param names string[]
----@return { hl: string, from: integer, to: integer }[]
+---@return diffundo.Mark[]
 local function spans_for_names(names)
   local spans = {}
   local col = 0
@@ -155,12 +157,13 @@ local function spans_for_names(names)
 end
 
 ---@param row diffundo.Row
----@return string, { hl: string, from: integer, to: integer }[]
-local function preview_parts(row)
+---@param ellipsis string
+---@return string, diffundo.Mark[]
+local function preview_parts(row, ellipsis)
   if row.seq == 0 then
     return "", {}
   end
-  local text, spans, matched = single_edit(row)
+  local text, spans, matched = single_edit(row, ellipsis)
   if matched then
     return text, spans
   end
@@ -169,9 +172,10 @@ local function preview_parts(row)
 end
 
 ---@param row diffundo.Row
----@return string, { hl: string, from: integer, to: integer }[]
-function M.preview_parts(row)
-  return preview_parts(row)
+---@param g diffundo.Glyphs|nil
+---@return string, diffundo.Mark[]
+function M.preview_parts(row, g)
+  return preview_parts(row, (g or glyphs.defaults).ellipsis)
 end
 
 ---@param view diffundo.Row[]
@@ -588,6 +592,19 @@ local function emit_line(state, text, spans)
   state.buf = state.buf + 1
 end
 
+---@param marks diffundo.Mark[]
+---@param limit integer
+---@return diffundo.Mark[]
+local function clipped(marks, limit)
+  local kept = {}
+  for _, mark in ipairs(marks) do
+    if mark.from < limit then
+      kept[#kept + 1] = { hl = mark.hl, from = mark.from, to = math.min(mark.to, limit) }
+    end
+  end
+  return kept
+end
+
 ---@param ctx diffundo.Context
 ---@param i integer
 ---@return string, diffundo.Span[]
@@ -595,12 +612,12 @@ local function row_line(ctx, i)
   local r = ctx.view[i]
   local gutter = ctx.gutters[i]
   local prefix = gutter .. string.rep(" ", ctx.tree_w - cell_width(gutter) + 1)
-  local preview, marks = preview_parts(r)
+  local preview, marks = preview_parts(r, ctx.glyphs.ellipsis)
   local seq = "#" .. r.seq
   local body_w = math.max(0, ctx.width - ctx.tree_w - 1 - ctx.seq_w - 1)
   if cell_width(preview) > body_w then
     preview = truncate_cells(preview, body_w, ctx.glyphs.ellipsis)
-    marks = {}
+    marks = clipped(marks, #preview)
   end
   local pad = body_w - cell_width(preview) + 1 + ctx.seq_w - #seq
   local line = prefix .. preview .. string.rep(" ", pad) .. seq

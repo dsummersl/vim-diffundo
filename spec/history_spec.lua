@@ -67,11 +67,24 @@ describe("history.preview_parts", function()
     assert.are.equal("DiffDelete", spans[1].hl)
   end)
 
-  it("shows a single-line replacement colored DiffChange", function()
-    local text, spans = history.preview_parts(row({ added = { "bar()" }, removed = { "foo()" } }))
+  it("shows only the changed words of a single-line replacement", function()
+    local text, spans = history.preview_parts(
+      row({ added = { "one two 3 four five" }, removed = { "one two three four five" } })
+    )
 
-    assert.are.equal("~ bar()", text)
+    assert.are.equal("…two ~3~ four…", text)
     assert.are.equal("DiffChange", spans[1].hl)
+    assert.are.equal("DiffText", spans[2].hl)
+    assert.are.equal("3", text:sub(spans[2].from + 1, spans[2].to))
+  end)
+
+  it("uses the configured ellipsis glyph", function()
+    local text = history.preview_parts(
+      row({ added = { "a b C d e" }, removed = { "a b c d e" } }),
+      { buffer = "@", write = "w", gap = "┆", ellipsis = "..." }
+    )
+
+    assert.are.equal("...b ~C~ d...", text)
   end)
 
   it("shows counts with the lines unit for mixed changes", function()
@@ -253,6 +266,16 @@ local function original()
 end
 
 describe("history.display rows", function()
+  local function marks_on(display, line)
+    local marks = {}
+    for _, span in ipairs(display.spans) do
+      if span.line == line then
+        marks[#marks + 1] = span
+      end
+    end
+    return marks
+  end
+
   it("renders a linear chain with the undo number right-aligned", function()
     local rows = {
       row({ seq = 3, parent = 2, added = { "foo()" } }),
@@ -478,9 +501,26 @@ describe("history.display rows", function()
     for _, line in ipairs(display.lines) do
       assert.are.equal(14, cell_width(line))
     end
-    for _, span in ipairs(display.spans) do
-      assert.is_true(span.line ~= 0, "truncated row must not keep its marks")
-    end
+    local marks = marks_on(display, 0)
+    assert.are.equal(1, #marks)
+    assert.are.equal("DiffAdd", marks[1].hl)
+    assert.are.equal("+ a ver…", display.lines[1]:sub(marks[1].col_start + 1, marks[1].col_end))
+  end)
+
+  it("keeps a truncated replacement's colors up to the ellipsis", function()
+    local rows = {
+      row({ seq = 2, parent = 1, added = { "x a-long-changed-word y" }, removed = { "x b y" } }),
+      row({ seq = 1, parent = 0 }),
+    }
+    local display = history.display(rows, { width = 20 })
+
+    assert.are.equal("╷ x ~a-long-chan… #2", display.lines[1])
+    local marks = marks_on(display, 0)
+    assert.are.same({ "DiffChange", "DiffText" }, { marks[1].hl, marks[2].hl })
+    assert.are.equal(
+      "a-long-chan…",
+      display.lines[1]:sub(marks[2].col_start + 1, marks[2].col_end)
+    )
   end)
 end)
 
@@ -714,12 +754,12 @@ describe("history.display with the us.txt tree", function()
     local display = history.display(rows, { width = width, current = 20 })
 
     local expected = {
-      rendered("╷", "~ 06", 20),
+      rendered("╷", "~06~", 20),
       rendered("├╯", "+0 lines", 19),
       rendered("│", "+0 lines", 18),
-      rendered("│", "~ SIX", 17),
-      rendered("├╯", "~ final", 16),
-      rendered("┊│", "~ 15", 15),
+      rendered("│", "~SIX~", 17),
+      rendered("├╯", "~final~", 16),
+      rendered("┊│", "~15~", 15),
       rendered("┊│", "- one", 14),
       rendered("┊│", "- two", 13),
       rendered("┊│", "- three", 12),
@@ -944,11 +984,11 @@ describe("history.display with sibling branches", function()
     local display = history.display(rows, { width = width, current = 18 })
 
     local expected = {
-      rendered("╷", "~ Q", 20),
+      rendered("╷", "~Q~", 20),
       rendered("├╯", "+0 lines", 19),
       rendered("w", "+0 lines", 18),
-      rendered("│", "~ W", 17),
-      rendered("├╯", "~ Z", 16),
+      rendered("│", "~W~", 17),
+      rendered("├╯", "~Z~", 16),
       rendered("┊╷", "- 2 15 things that are", 15),
       rendered("┊│", "- B", 14),
       rendered("┊│", "- 2 15 things that are", 13),
@@ -963,7 +1003,7 @@ describe("history.display with sibling branches", function()
       rendered("w", "+5 -2 lines", 4),
       rendered("│", "+5 -5 lines", 3),
       rendered("w", "+10 lines", 2),
-      rendered("w", "~ 1", 1),
+      rendered("w", "~1~", 1),
     }
 
     for i, line in ipairs(expected) do
@@ -1079,7 +1119,7 @@ describe("history.display with real neovim undo shapes", function()
       "╷  + x                                #4",
       "├╯ + c                                #3",
       "├╯ + b                                #2",
-      "│  ~ a                                #1",
+      "│  ~a~                                #1",
     })
   end)
 
@@ -1098,7 +1138,7 @@ describe("history.display with real neovim undo shapes", function()
       "├╯ + x                                #4",
       "┊╷ + c                                #3",
       "├╯ + b                                #2",
-      "│  ~ a                                #1",
+      "│  ~a~                                #1",
     })
   end)
 
@@ -1110,8 +1150,8 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 2 })
 
     assert_tree_lines(display, {
-      "╷ ~ z                                 #2",
-      "╷ ~ a                                 #1",
+      "╷ ~z~                                 #2",
+      "╷ ~a~                                 #1",
     })
   end)
 
@@ -1128,7 +1168,7 @@ describe("history.display with real neovim undo shapes", function()
       "╷  + x                                #4",
       "├w + c                                #3",
       "├w + b                                #2",
-      "w  ~ a                                #1",
+      "w  ~a~                                #1",
     })
   end)
 
