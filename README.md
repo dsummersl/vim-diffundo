@@ -1,112 +1,68 @@
-vim-diffundo
-============
+# diffundo.nvim
 
-Open a vertical diffsplit against a files undo history, and quickly pull changes
+Open a vertical diffsplit against a files undo history, and quickly find and pull changes
 from your undo history into your current buffer.
 
 Requires neovim 0.10 or newer.
 
-Installation
-------------
+# Installation
 
-Use your favorite package manager to install this plugin. For instance:
-
-    Plug 'dsummersl/vim-diffundo'
-
-Commands
---------
-
-One command, `:Diffundo`, with subcommands (tab-completes):
-
-*:Diffundo earlier [count]* : compare your current buffer against the buffer if you had typed `:earlier [count]`. Accepts the same count as the builtin: `3`, `10s`, `2f` ... (default `1`).
-
-*:Diffundo later [count]* : the same for `:later`.
-
-*:Diffundo undo {n}* : compare your current buffer against the buffer at exactly
-undo number `{n}` (as reported by `:undolist` or the history pane), the same
-state `:undo {n}` would restore.
-
-*:Diffundo search {pattern}* : find the undo state whose edit **added** a line matching `{pattern}` (a vim regex, so `'ignorecase'` and `'smartcase'` apply as with `/`), show it in the diff split, and put your cursor on the match. Repeat it to find the next older one.
-
-*:Diffundo search! {pattern}* : the same for a line that was **removed**.
-
-Searching also filters the history pane: only the states whose edit matches
-stay visible, with `┆ N undos` rows standing in for the rest, and the pane's
-footer reads `filter: {pattern}` (`filter!:` for removals) instead of the diff
-size. The next `:Diffundo earlier`/`later` clears it.
-
-*:Diffundo focus* : jump into the history pane and expand it into the whole
-undo tree (opening the diff split at the buffer's own state first if needed).
-
-In the expanded pane: *j*/*k* move by state (or use counts, *gg*/*G*), *J*/*K*
-move between written states, *<cr>* shows the selected state in the diff split,
-*/* filters the pane exactly like `:Diffundo search` does (vim regex, empty to
-clear) and puts the cursor on the newest match, *zo*/*zc* open and close
-folds (a fold you opened stays open when *<cr>* re-renders the pane), *g?* notifies this key map, and *q*/*<esc>* (or leaving the window, e.g.
-*<c-w>p*) collapse the pane and return to your buffer.
-
-*:Diffundo close* : close the diff split and history pane, if either is open.
-
-Search walks the undo *tree*: each state is compared with the state it was
-edited from, so switching undo branches never shows up as a change.
-
-The diff window gets no statusline or winbar label, so its lines stay on the
-same screen rows as your buffer's; the history pane shows which state it is.
-
-Lua API
--------
-
-Everything the command does is a function in `require("diffundo")`. All of
-them leave your cursor and current window where they were and raise errors
-rather than printing them, so they can be called from your own code (a
-telescope picker, a scratch buffer):
+Use your favorite package manager to install this plugin. Example configuration:
 
 ```lua
-local diffundo = require("diffundo")
-
-diffundo.earlier("1f")
-diffundo.later()
-diffundo.undo("12")
-local hit = diffundo.search("TODO")                    -- nil when nothing matches
-local gone = diffundo.search("TODO", { removed = true })
--- hit = { seq, time, save, line, col, lnum }
-diffundo.close()
+return {
+  "dsummersl/diffundo.nvim",
+  dependencies = {
+    "tpope/vim-repeat",
+  },
+  config = function()
+    vim.keymap.set("n", "<leader>du", ":Diffundo earlier<cr>", { desc = "Diffundo earlier" })
+    vim.keymap.set("n", "<leader>dl", ":Diffundo later<cr>", { desc = "Diffundo later" })
+    vim.keymap.set("n", "<leader>dU", ":Diffundo earlier 1f<cr>", { desc = "Diffundo earlier 1f (write)" })
+    vim.keymap.set("n", "<leader>dL", ":Diffundo later 1f<cr>", { desc = "Diffundo later 1f (write)" })
+    vim.keymap.set("n", "<leader>d/", ":Diffundo search ", { desc = "Diffundo search" })
+    vim.keymap.set("n", "<leader>df", ":Diffundo focus<cr>", { desc = "Diffundo focus" })
+    vim.keymap.set("n", "<leader>dc", ":Diffundo close<cr>", { desc = "Diffundo close" })
+  end,
+}
 ```
 
-`require("diffundo.walker").steps(from_seq)` is the iterator underneath: it
-yields `{ seq, parent, time, save, lines, parent_lines, added, removed }` per
-undo state, newest first, and must be called with the source buffer current.
 
-History pane
-------------
+# Commands
+
+The `:Diffundo` command acts as 'diff wrapper' around the builtin `:earlier`, `:later`, and `:undo` ex commands.
+
+Subcommands that open a diff split:
+
+- `:Diffundo earlier <count>` - ...against an older state (see [:earlier](https://neovim.io/doc/user/undo/#%3Aearlier))
+- `:Diffundo later <count>` - ...against a newer state (see [:earlier](https://neovim.io/doc/user/undo/#%3Alater))
+- `:Diffundo undo <n>` - ...against a specific undo state (see [:undo {n}])
+- `:Diffundo search <pattern>` - ...against the next undo that introduced text that added `<pattern>`. Use `search!` to search undos that removed `<pattern>`.
+
+Other commands:
+- `:Diffundo focus` - open the diff split and focus on the history pane. If the diff split is already open, focuses on the history pane.
+- `:Diffundo close` - close the diff and hovering history window.
+
+# History pane
 
 While the diff split is open, a small pane in the diff window's lower right
-corner shows what the diff is comparing -- like an LSP hover, it never takes
-the focus, so you can keep editing and keep pressing `.`:
+corner shows what the diff split is comparing.
 
 ```
-╭─ #4  2026-09-26 10:12:03 ────────╮
-│@ + return x                   #12│   <- the state your buffer is at
-│┆   7 undos 1w                    │   <- states in between (and writes)
-│╷ - local y = 1                 #4│   <- the state the diff shows, bolded
-│┆   3 undos                       │
+╭─ #4  2026-09-26 10:12:03 ────────╮   <- what we're currently diffing, and when the change happened
+│@ + return x                   #12│   <- the undo # of your current buffer (what you're editing now).
+│┆   7 undos 1w                    │   <- states in between (total + # written to disk)
+│╷ - local y = 1                 #4│   <- the undo that the diff shows
+│┆   3 undos                       │   <- states below...
 ╰──────────────────── +3 -5 lines ─╯
 ```
 
-The title is the diff's state and its date; the footer is the size of the diff
-against your buffer. Each row is `lanes pip preview #seq`: the pip is `@` for
-your buffer's state, `w` for a written state, otherwise the tree lane (`│`,
-shortened to `╷` at a branch's tip so it doesn't read as running into the row
-above it); the diff's own row carries no separate pip, it's the one shown in
-bold. A buffer with no changes still opens, against `#0`, so you can leave the
-pane up and watch your edits pile up. It flips to the upper corner when your
-cursor would sit under it, and closes with the diff window.
+When you use `:Diffundo focus` you pane expandns to show the full undo history. You can navigate and change the diff from here:
+- j/k move up and down the undo history
+- J/K move to the next/previous undo that was written to disk.
+- <cr> change the diff to the one under the cursor.
 
-`:Diffundo focus` expands the pane into the whole tree, using the same row
-format; branch stretches longer than `g:diffundo_fold_min` fold into
-`┆ N undos` captions.
-
-Configuration:
+# Configuration
 
 ```lua
 vim.g.diffundo_history = false                     -- no pane
@@ -126,21 +82,7 @@ The rows come from `require("diffundo.history").rows`; each state's text and
 its diff size against your buffer are cached, so the pane only walks new undo
 states as you edit.
 
-Setup
------
-
-Example setup:
-
-    " Diff against last undo:
-    map <leader>uu :Diffundo earlier<cr>
-    map <leader>rr :Diffundo later<cr>
-
-    " Diff against last time this buffer was written:
-    map <leader>uf :Diffundo earlier 1f<cr>
-    map <leader>rf :Diffundo later 1f<cr>
-
-Repeating
----------
+# Repeating
 
 If [tpope/vim-repeat](https://github.com/tpope/vim-repeat) is installed, then
 `.` repeats the last `:Diffundo` command with the same arguments you last
@@ -152,8 +94,7 @@ commands typed by hand:
 
 Without vim-repeat the commands still work, `.` just won't repeat them.
 
-Development
------------
+# Development
 
 Requires `lua`, `luarocks`, `stylua`, `selene`, `ast-grep`, `lua-language-server`, and `jq` on `PATH`.
 
@@ -176,3 +117,7 @@ tests in `spec/tree_spec.lua` and `spec/history_spec.lua` are derived from.
 
 Architecture Decision Records live in `docs/adr`; see `AGENTS.md` for the
 day-to-day commands.
+
+# About
+
+I managed the [vim-mundo](https://github.com/simnalamburt/vim-mundo) plugin for many years; this is my sense of the successor to it for neovim.
