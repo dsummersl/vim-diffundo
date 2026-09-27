@@ -82,6 +82,13 @@ local function lone_removed(a, r)
   return a == 0 and r == 1
 end
 
+---@param a integer
+---@param r integer
+---@return boolean
+local function lone_replaced(a, r)
+  return a == 1 and r == 1
+end
+
 ---@param row diffundo.Row
 ---@return string, { hl: string, from: integer, to: integer }[], boolean
 local function single_edit(row)
@@ -93,6 +100,10 @@ local function single_edit(row)
   if lone_removed(a, r) then
     local text = "- " .. row.removed[1]
     return text, { { hl = "DiffDelete", from = 0, to = #text } }, true
+  end
+  if lone_replaced(a, r) then
+    local text = "~ " .. row.added[1]
+    return text, { { hl = "DiffChange", from = 0, to = #text } }, true
   end
   return "", {}, false
 end
