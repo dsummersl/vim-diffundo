@@ -50,6 +50,18 @@ describe("split.open", function()
     local window = vim:diff_window().options
     assert.is_true(window.diff)
     assert.are.equal("diff", window.foldmethod)
+    assert.are.equal(0, window.foldlevel)
+  end)
+
+  it("folds the source window too, whatever foldlevelstart left behind", function()
+    vim.windows[vim.current_win].options.foldlevel = 99
+
+    split.open()
+
+    local window = vim.windows[vim:window_of_buffer(vim.source_bn)].options
+    assert.is_true(window.diff)
+    assert.are.equal("diff", window.foldmethod)
+    assert.are.equal(0, window.foldlevel)
   end)
 
   it("names the diff buffer after the undo number without a statusline or winbar", function()
@@ -77,6 +89,48 @@ describe("split.open", function()
 
     assert.are.equal(diff_bn, vim.t.diffundo_diff_bn)
     assert.are.equal(2, #vim.win_order)
+  end)
+
+  it("reports whether it opened a new split", function()
+    assert.is_true(split.open())
+    assert.is_false(split.open())
+  end)
+
+  it("replaces the split when run from another buffer", function()
+    split.open()
+    local old_diff_bn = vim.t.diffundo_diff_bn
+    local other = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_open_win(other, true, {})
+
+    assert.is_true(split.open())
+
+    assert.are.equal(other, vim.t.diffundo_source_bn)
+    assert.is_nil(vim:window_of_buffer(old_diff_bn))
+    assert.is_false(vim.windows[vim:window_of_buffer(vim.source_bn)].options.diff)
+    assert.are.equal(3, #vim.win_order)
+  end)
+
+  it("closes the old diff window when the source window switched buffers", function()
+    split.open()
+    local old_diff_bn = vim.t.diffundo_diff_bn
+    vim.cmd("enew")
+
+    assert.is_true(split.open())
+
+    assert.is_nil(vim:window_of_buffer(old_diff_bn))
+    assert.are.equal(2, #vim.win_order)
+  end)
+
+  it("turns diff off in a diff window that now shows another buffer", function()
+    split.open()
+    local old_diff_win = vim:window_of_buffer(vim.t.diffundo_diff_bn)
+    vim.current_win = old_diff_win
+    vim.cmd("enew")
+    vim.current_win = vim:window_of_buffer(vim.source_bn)
+
+    split.open()
+
+    assert.is_false(vim.windows[old_diff_win].options.diff)
   end)
 
   it("returns to the source window before reopening", function()
@@ -118,6 +172,7 @@ describe("split.close", function()
 
     assert.is_false(split.is_open())
     assert.are.equal(1, #vim.win_order)
+    assert.is_false(vim.windows[vim.current_win].options.diff)
   end)
 
   it("is a no-op when nothing is open", function()

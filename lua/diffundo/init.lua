@@ -30,6 +30,15 @@ local function cursor_neutral(fn)
   return result
 end
 
+---@return boolean
+local function open_split()
+  local fresh = split.open()
+  if fresh then
+    pane.close()
+  end
+  return fresh
+end
+
 ---@return string[]
 local function current_lines()
   return vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -95,7 +104,7 @@ end
 local function step(command, amount)
   cursor_neutral(function()
     local normalized = count.normalize(amount)
-    split.open()
+    open_split()
     early_late(command, normalized)
     pane.set_filter(nil)
     pane.render()
@@ -117,7 +126,7 @@ end
 function M.undo(seq)
   cursor_neutral(function()
     local normalized = count.exact(seq)
-    split.open()
+    open_split()
     restore.within_source(function()
       vim.cmd("silent undo " .. normalized)
       split.place(current_lines(), vim.fn.changenr())
@@ -134,15 +143,14 @@ function M.close()
 end
 
 function M.focus()
-  if not split.is_open() then
-    cursor_neutral(function()
-      split.open()
+  cursor_neutral(function()
+    if open_split() then
       restore.within_source(function()
         split.place(current_lines(), vim.fn.changenr())
       end)
-      return nil
-    end)
-  end
+    end
+    return nil
+  end)
   pane.focus()
 end
 
@@ -152,9 +160,8 @@ end
 function M.search(needle, opts)
   return cursor_neutral(function()
     local regex = pattern.compile(needle)
-    local was_open = split.is_open()
-    split.open()
-    local from_seq = was_open and vim.t.diffundo_diff_undonr or vim.fn.changenr() + 1
+    local fresh = open_split()
+    local from_seq = fresh and vim.fn.changenr() + 1 or vim.t.diffundo_diff_undonr
     ---@type diffundo.Hit|nil
     local hit
     restore.within_source(function()
