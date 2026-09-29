@@ -37,8 +37,8 @@ CONTENTS                                                     *diffundo-contents*
     Open or toggle the floating history sidebar: one line per undo state
     with a one-line preview of what that edit changed. In the sidebar
     j/k move by change, J/K between written states, <cr> shows the
-    selected state in the diff split, |/| filters the list (a Vim regex,
-    empty to clear it) and q or <esc> closes it.
+    selected state in the diff split, <c-cr> moves the buffer itself to
+    the selected state, and q or <esc> closes it.
 
     The |:Diffundo-earlier|, |:Diffundo-later| and |:Diffundo-search|
     commands open the float by default; a leading -no-history flag or

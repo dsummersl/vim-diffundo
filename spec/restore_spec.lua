@@ -72,3 +72,28 @@ describe("restore.within_source", function()
     assert.are.same({ "first", "second", "third" }, vim:source_buffer().lines)
   end)
 end)
+
+describe("restore.apply", function()
+  it("leaves the source buffer at the applied state", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    split.open()
+
+    restore.apply(1)
+
+    assert.are.equal(1, vim.history.seq)
+    assert.are.same({ "first" }, vim:source_buffer().lines)
+  end)
+
+  it("runs diffupdate and keeps the source window cursor", function()
+    local vim = fakevim.new(history())
+    vim:install()
+    split.open()
+    vim.api.nvim_win_set_cursor(vim.api.nvim_get_current_win(), { 2, 3 })
+
+    restore.apply(1)
+
+    assert.are.same({ 2, 3 }, vim.api.nvim_win_get_cursor(vim.api.nvim_get_current_win()))
+    assert.are.equal("diffupdate", vim.commands[#vim.commands])
+  end)
+end)

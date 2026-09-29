@@ -57,10 +57,11 @@ corner shows what the diff split is comparing.
 ╰──────────────────── +3 -5 lines ─╯
 ```
 
-When you use `:Diffundo focus` you pane expandns to show the full undo history. You can navigate and change the diff from here:
+When you use `:Diffundo focus` you pane expands to show the full undo history. Keymaps in the history buffer:
 - j/k move up and down the undo history
 - J/K move to the next/previous undo that was written to disk.
 - <cr> change the diff to the one under the cursor.
+- <c-cr> move your buffer to the undo under the cursor (the diff stays where it is).
 
 # Configuration
 

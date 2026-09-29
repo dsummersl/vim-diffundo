@@ -10,8 +10,6 @@ local window = require("diffundo.window")
 
 local M = {}
 
-local help = "j/k move · J/K written · <cr> show in diff · / filter · zo/zc folds · q back"
-
 ---@type integer|nil
 local namespace
 
@@ -405,10 +403,7 @@ local function map_keys(win)
     M.move_save(-1)
   end)
   window.map(win, "<cr>", M.place)
-  window.map(win, "/", M.filter)
-  window.map(win, "g?", function()
-    vim.notify(help)
-  end)
+  window.map(win, "<c-cr>", M.apply)
   window.map(win, "q", function()
     M.collapse(true)
   end)
@@ -583,6 +578,13 @@ function M.collapse(back)
   M.render()
 end
 
+---@param seq integer
+local function reselect(seq)
+  M.render()
+  select_seq(seq)
+  M.update_labels()
+end
+
 function M.place()
   local seq = seq_at_cursor()
   if seq == nil then
@@ -594,9 +596,18 @@ function M.place()
       split.place(vim.api.nvim_buf_get_lines(0, 0, -1, false), seq)
     end)
   end)
-  M.render()
-  select_seq(seq)
-  M.update_labels()
+  reselect(seq)
+end
+
+function M.apply()
+  local seq = seq_at_cursor()
+  if seq == nil then
+    return
+  end
+  keep_window(function()
+    restore.apply(seq)
+  end)
+  reselect(seq)
 end
 
 ---@return table<integer, boolean>

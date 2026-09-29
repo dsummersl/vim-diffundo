@@ -779,6 +779,63 @@ test({
 
 test({
   mode: "nvim",
+  name:
+    "<c-cr> moves the buffer to the state under the cursor and keeps the diff",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["one"], ["one", "two"], [
+      "one",
+      "two",
+      "three",
+    ]]);
+
+    await denops.cmd("Diffundo focus");
+
+    // WHY: the pane opens on the diff's row (#3); #2 is the row below it.
+    await denops.call("feedkeys", "j", "x");
+    const diffWin = await denops.call("bufwinid", "diffundo://*") as number;
+    const pane = await paneWin(denops);
+    const sourceWin = (await winIds(denops)).find(
+      (w) => w !== diffWin && w !== pane,
+    ) as number;
+    await denops.call("nvim_win_set_cursor", sourceWin, [1, 2]);
+
+    // WHY: only nvim_input carries the CTRL modifier; a terminal sends CTRL-CR
+    // as the same byte as <cr>.
+    await denops.call("nvim_input", "<C-CR>");
+    await denops.call("wait", 100, "v:false");
+
+    await assertNoErrors(denops);
+    const windows = await windowStates(denops);
+    const diff = windows.find((w) => w.buftype === "nofile");
+    const source = windows.find((w) => w.buftype === "");
+    assert(diff && source, "both split windows still open");
+    assertEquals(source.lines, ["one", "two"]);
+    assertEquals(
+      await denops.eval(`trim(win_execute(${sourceWin}, 'echo changenr()'))`),
+      "2",
+    );
+    // WHY: :undo moves the cursor, so the source window's cursor has to be put
+    // back where the user left it.
+    assertEquals(await denops.call("nvim_win_get_cursor", sourceWin), [1, 2]);
+    assertEquals(diff.lines, ["one", "two", "three"]);
+    assertEquals(await denops.eval("t:diffundo_diff_undonr"), 3);
+
+    assertEquals(await denops.eval("line('.')"), 2);
+    await assertExpanded(denops, [
+      "╷ + three                             #3",
+      "@ + two                               #2",
+      "│ ~one~                               #1",
+      "╷                                     #0",
+    ]);
+    // WHY: the footer follows the pane's row, which is now the buffer's state.
+    assertEquals((await paneLabels(denops)).footer, " +0 -0 lines ");
+  },
+});
+
+test({
+  mode: "nvim",
   name: "a long branch stretch folds into a gap caption and zo unfolds it",
   prelude,
   fn: async (denops) => {

@@ -256,6 +256,64 @@ describe("pane.focus", function()
     assert.are.equal(2, vim.t.diffundo_diff_undonr)
   end)
 
+  it("<c-cr> moves the source buffer to the row under the cursor and stays in the pane", function()
+    vim.api.nvim_win_set_cursor(vim:pane_window(), { 3, 0 })
+
+    vim:press("<c-cr>")
+
+    assert.are.equal(1, vim.history.seq)
+    assert.are.same({ "a" }, vim:source_buffer().lines)
+    assert.are.equal(vim:pane_window(), vim.current_win)
+  end)
+
+  it("<c-cr> leaves the diff on the state it was showing", function()
+    vim.g.diffundo_date_format = "%Y"
+    vim.api.nvim_win_set_cursor(vim:pane_window(), { 3, 0 })
+
+    vim:press("<c-cr>")
+
+    assert.are.equal(2, vim.t.diffundo_diff_undonr)
+    assert.are.same({ "a", "b" }, vim:diff_buffer().lines)
+    assert.are.equal(
+      " #1  " .. os.date("%Y", vim.history.entries[1].time) .. " ",
+      config(vim).title
+    )
+    assert.are.equal(" +0 -0 lines ", config(vim).footer)
+  end)
+
+  it("<c-cr> re-renders the pane with @ on the buffer's new state", function()
+    vim.api.nvim_win_set_cursor(vim:pane_window(), { 3, 0 })
+
+    vim:press("<c-cr>")
+
+    assert.are.same({
+      "╷ + c                               #3",
+      "│ + b                               #2",
+      "@ + a                               #1",
+      "╷                                   #0",
+    }, vim:pane_lines())
+    assert.are.same({ 3, 0 }, vim.windows[vim:pane_window()].cursor)
+  end)
+
+  it("<c-cr> on nothing does nothing", function()
+    vim.t.diffundo_pane_seqs = { -1 }
+    vim.api.nvim_win_set_cursor(vim:pane_window(), { 1, 0 })
+
+    vim:press("<c-cr>")
+
+    assert.are.equal(3, vim.history.seq)
+    assert.are.equal(2, vim.t.diffundo_diff_undonr)
+  end)
+
+  it("<c-cr> keeps the source window cursor", function()
+    vim.api.nvim_win_set_cursor(vim:window_of_buffer(vim.source_bn), { 2, 0 })
+    vim.api.nvim_win_set_cursor(vim:pane_window(), { 3, 0 })
+
+    vim:press("<c-cr>")
+
+    assert.are.same({ 2, 0 }, vim.api.nvim_win_get_cursor(vim:window_of_buffer(vim.source_bn)))
+  end)
+
   it("q collapses and returns to the source window", function()
     vim:press("q")
 
@@ -289,6 +347,7 @@ describe("pane.focus", function()
     vim:press("g?")
 
     assert.matches("J/K written", vim:last_notification())
+    assert.matches("<c%-cr> go to state", vim:last_notification())
   end)
 
   it("/ keeps only the matching rows with gap rows between and footers the filter", function()
