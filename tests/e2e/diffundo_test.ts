@@ -681,7 +681,7 @@ test({
     await denops.call("wait", 100, "v:false");
     assertEquals(await paneLines(denops), [
       "@ ~hello~                             #1",
-      "╷                                     #0",
+      "│                                     #0",
     ]);
     assertEquals((await paneLabels(denops)).footer, " +1 -1 lines ");
   },
@@ -722,7 +722,7 @@ test({
     await assertExpanded(denops, [
       "@ + two                               #2",
       "│ ~one~                               #1",
-      "╷                                     #0",
+      "│                                     #0",
     ]);
     assertEquals(await denops.eval("t:diffundo_diff_undonr"), 2);
 
@@ -826,7 +826,7 @@ test({
       "╷ + three                             #3",
       "@ + two                               #2",
       "│ ~one~                               #1",
-      "╷                                     #0",
+      "│                                     #0",
     ]);
     // WHY: the footer follows the pane's row, which is now the buffer's state.
     assertEquals((await paneLabels(denops)).footer, " +0 -0 lines ");
@@ -893,7 +893,7 @@ test({
       "┊╷ + c                                #3",
       "├╯ + b                                #2",
       "│  ~a~                                #1",
-      "╷                                     #0",
+      "│                                     #0",
     ]);
 
     await denops.call("feedkeys", "q", "x");
@@ -928,7 +928,7 @@ test({
       "├w + c                                #3",
       "├w + b                                #2",
       "w  ~a~                                #1",
-      "╷                                     #0",
+      "│                                     #0",
     ]);
 
     await denops.call("feedkeys", "q", "x");

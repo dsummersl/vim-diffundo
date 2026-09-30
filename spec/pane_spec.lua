@@ -204,7 +204,7 @@ describe("pane.focus", function()
       "@ + c                               #3",
       "│ + b                               #2",
       "│ + a                               #1",
-      "╷                                   #0",
+      "│                                   #0",
     }, vim:pane_lines())
     assert.are.same({ 2, 0 }, vim.windows[vim:pane_window()].cursor)
     assert.is_true(config(vim).focusable)
@@ -291,7 +291,7 @@ describe("pane.focus", function()
       "╷ + c                               #3",
       "│ + b                               #2",
       "@ + a                               #1",
-      "╷                                   #0",
+      "│                                   #0",
     }, vim:pane_lines())
     assert.are.same({ 3, 0 }, vim.windows[vim:pane_window()].cursor)
   end)

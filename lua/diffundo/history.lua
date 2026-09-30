@@ -52,6 +52,7 @@ local M = {}
 ---@field view diffundo.Row[]
 ---@field lane integer[]
 ---@field heads table<integer, boolean>
+---@field turns table<integer, boolean>
 ---@field gutters table<integer, string>
 ---@field tree_w integer
 ---@field seq_w integer
@@ -183,9 +184,7 @@ end
 local function seq_index_for(view)
   local index = {}
   for i, r in ipairs(view) do
-    if r.seq ~= 0 then
-      index[r.seq] = i
-    end
+    index[r.seq] = i
   end
   return index
 end
@@ -197,7 +196,7 @@ local function children_for(view, seq_index)
   local children = {}
   for i, r in ipairs(view) do
     local parent = seq_index[r.parent]
-    if parent then
+    if parent and parent ~= i then
       children[parent] = children[parent] or {}
       children[parent][#children[parent] + 1] = i
     end
@@ -226,13 +225,12 @@ local function trunk_of(view, seq_index)
 end
 
 ---@param view diffundo.Row[]
----@param seq_index table<integer, integer>
 ---@param trunk table<integer, boolean>
 ---@return integer[]
-local function root_lanes(view, seq_index, trunk)
+local function root_lanes(view, trunk)
   local lanes = {}
   for i, r in ipairs(view) do
-    if seq_index[r.parent] == nil then
+    if r.parent == 0 then
       lanes[i] = trunk[r.seq] and 1 or 2
     end
   end
@@ -255,7 +253,7 @@ end
 ---@param trunk table<integer, boolean>
 ---@return integer[]
 local function lane_for(view, seq_index, children, trunk)
-  local roots = root_lanes(view, seq_index, trunk)
+  local roots = root_lanes(view, trunk)
   local lane = {}
   for i = #view, 1, -1 do
     local root = roots[i]
@@ -339,20 +337,6 @@ local function child_arms(view, children, trunk)
   return arms
 end
 
----@param view diffundo.Row[]
----@param seq_index table<integer, integer>
----@param trunk table<integer, boolean>
----@return integer[]
-local function root_arms(view, seq_index, trunk)
-  local arms = {}
-  for i, r in ipairs(view) do
-    if seq_index[r.parent] == nil and trunk[r.seq] == nil then
-      arms[#arms + 1] = i
-    end
-  end
-  return arms
-end
-
 ---@param lane integer[]
 ---@param first integer[]
 ---@param last integer[]
@@ -383,8 +367,68 @@ local function heads_for(view, seq_index)
   return heads
 end
 
+---@param j integer
+---@param c integer
+---@param open table<integer, table<integer, boolean>>
+---@return boolean
+local function vertical_at(j, c, open)
+  local row_open = open[j]
+  return c == 1 or (row_open ~= nil and row_open[c] == true)
+end
+
+---@param i integer
+---@param lane integer[]
+---@param open table<integer, table<integer, boolean>>
+---@return boolean
+local function peels_off(i, lane, open)
+  local own = lane[i]
+  if (lane[i - 1] or 0) ~= own then
+    return vertical_at(i - 1, own - 1, open)
+  end
+  return (lane[i + 1] or 0) ~= own and vertical_at(i + 1, own - 1, open)
+end
+
+---@param i integer
+---@param lane integer[]
+---@param parent integer|nil
+---@return boolean
+local function edge_at(i, lane, parent)
+  local from = parent and lane[parent] or 0
+  return from >= 2 and lane[i] == from + 1
+end
+
 ---@param view diffundo.Row[]
----@return integer[], table<integer, table<integer, boolean>>, table<integer, boolean>
+---@param i integer
+---@param lane integer[]
+---@param open table<integer, table<integer, boolean>>
+---@param seq_index table<integer, integer>
+---@return boolean
+local function junction_for(view, i, lane, open, seq_index)
+  local own = lane[i]
+  if own == nil or own < 2 then
+    return false
+  end
+  if peels_off(i, lane, open) then
+    return true
+  end
+  return edge_at(i, lane, seq_index[view[i].parent])
+end
+
+---@param view diffundo.Row[]
+---@param lane integer[]
+---@param open table<integer, table<integer, boolean>>
+---@param seq_index table<integer, integer>
+---@return table<integer, boolean>
+local function junctions_for(view, lane, open, seq_index)
+  local turns = {}
+  for i = 1, #view do
+    turns[i] = junction_for(view, i, lane, open, seq_index)
+  end
+  return turns
+end
+
+---@param view diffundo.Row[]
+---@return integer[], table<integer, table<integer, boolean>>, table<integer, boolean>, table<integer, boolean>
 local function topology_for(view)
   local seq_index = seq_index_for(view)
   local children = children_for(view, seq_index)
@@ -393,29 +437,8 @@ local function topology_for(view)
   local first = subtree_starts(view, children)
   local last = subtree_ends(view, children)
   local arms = child_arms(view, children, trunk)
-  for _, arm in ipairs(root_arms(view, seq_index, trunk)) do
-    arms[#arms + 1] = arm
-  end
-  return lane, open_columns(lane, first, last, arms), heads_for(view, seq_index)
-end
-
----@param i integer
----@param lane integer[]
----@param other integer
----@return boolean
-local function lane_gap(i, lane, other)
-  return (lane[other] or 0) ~= lane[i]
-end
-
----@param i integer
----@param lane integer[]
----@return boolean
-local function junction_for(i, lane)
-  local own = lane[i]
-  if own == nil or own < 2 then
-    return false
-  end
-  return lane_gap(i, lane, i - 1) or lane_gap(i, lane, i + 1)
+  local open = open_columns(lane, first, last, arms)
+  return lane, open, heads_for(view, seq_index), junctions_for(view, lane, open, seq_index)
 end
 
 ---@param i integer
@@ -465,10 +488,11 @@ end
 ---@param lane integer[]
 ---@param open_i table<integer, boolean>|nil
 ---@param pip string
+---@param turn boolean
 ---@return string
-local function gutter_for(i, lane, open_i, pip)
+local function gutter_for(i, lane, open_i, pip, turn)
   local cells = pass_columns(lane[i], open_i)
-  if junction_for(i, lane) then
+  if turn then
     for c = 1, lane[i] - 2 do
       cells[c] = "┊"
     end
@@ -524,14 +548,15 @@ end
 ---@param view diffundo.Row[]
 ---@param i integer
 ---@param lane integer[]
+---@param turns table<integer, boolean>
 ---@return integer
-local function run_end_for(view, i, lane)
+local function run_end_for(view, i, lane, turns)
   local run_end = i
   while
     run_end < #view
     and view[run_end].parent == view[run_end + 1].seq
     and lane[run_end + 1] == lane[i]
-    and not junction_for(run_end + 1, lane)
+    and not turns[run_end + 1]
   do
     run_end = run_end + 1
   end
@@ -541,22 +566,24 @@ end
 ---@param i integer
 ---@param lane integer[]
 ---@param heads table<integer, boolean>
+---@param turns table<integer, boolean>
 ---@return boolean
-local function standalone(i, lane, heads)
-  return heads[i] or lane[i] == 1 or junction_for(i, lane)
+local function standalone(i, lane, heads, turns)
+  return heads[i] or lane[i] == 1 or turns[i]
 end
 
 ---@param view diffundo.Row[]
 ---@param lane integer[]
 ---@param open table<integer, table<integer, boolean>>
 ---@param heads table<integer, boolean>
+---@param turns table<integer, boolean>
 ---@param opts diffundo.DisplayOpts
 ---@param g diffundo.Glyphs
 ---@return table<integer, string>
-local function gutters_for(view, lane, open, heads, opts, g)
+local function gutters_for(view, lane, open, heads, turns, opts, g)
   local gutters = {}
   for i, r in ipairs(view) do
-    gutters[i] = gutter_for(i, lane, open[i], pip_for(i, r, opts, g, heads))
+    gutters[i] = gutter_for(i, lane, open[i], pip_for(i, r, opts, g, heads), turns[i])
   end
   return gutters
 end
@@ -714,11 +741,11 @@ end
 local function expanded(ctx, state)
   local i = 1
   while i <= #ctx.view do
-    if standalone(i, ctx.lane, ctx.heads) then
+    if standalone(i, ctx.lane, ctx.heads, ctx.turns) then
       emit_row(ctx, i, state)
       i = i + 1
     else
-      i = emit_run(ctx, i, run_end_for(ctx.view, i, ctx.lane), state)
+      i = emit_run(ctx, i, run_end_for(ctx.view, i, ctx.lane, ctx.turns), state)
     end
   end
 end
@@ -767,13 +794,14 @@ end
 ---@return diffundo.Display
 function M.display(view, opts)
   local g = opts.glyphs or glyphs.defaults
-  local lane, open, heads = topology_for(view)
-  local gutters = gutters_for(view, lane, open, heads, opts, g)
+  local lane, open, heads, turns = topology_for(view)
+  local gutters = gutters_for(view, lane, open, heads, turns, opts, g)
   ---@type diffundo.Context
   local ctx = {
     view = view,
     lane = lane,
     heads = heads,
+    turns = turns,
     gutters = gutters,
     tree_w = tree_width(view, gutters, opts.keep),
     seq_w = seq_width(view),

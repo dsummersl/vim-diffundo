@@ -289,7 +289,7 @@ describe("history.display rows", function()
       "╷ + foo()                   #3",
       "│ +0 lines                  #2",
       "│ +0 lines                  #1",
-      "╷                           #0",
+      "│                           #0",
     }, display.lines)
     assert.are.same({ 1, 2, 3, 4 }, display.row_to_line)
   end)
@@ -582,7 +582,7 @@ describe("history.display collapsed", function()
     assert.are.same({
       "@ + line 12                    #12",
       "┆   11 undos",
-      "╷                               #0",
+      "│                               #0",
     }, display.lines)
   end)
 
@@ -781,7 +781,7 @@ describe("history.display with the us.txt tree", function()
       assert.are.equal(width, cells(display.lines[i]))
     end
     assert.are.equal(21, #display.lines)
-    assert.matches("^╷ +#0$", display.lines[21])
+    assert.matches("^│ +#0$", display.lines[21])
   end)
 
   it("folds rows 15 through 6 with the caption served as foldtext", function()
@@ -1011,7 +1011,7 @@ describe("history.display with sibling branches", function()
       assert.are.equal(width, cells(display.lines[i]))
     end
     assert.are.equal(21, #display.lines)
-    assert.matches("^╷ +#0$", display.lines[21])
+    assert.matches("^│ +#0$", display.lines[21])
   end)
 
   it("folds rows 14 through 6 and keeps the caps outside", function()
@@ -1208,7 +1208,7 @@ describe("history.display with real neovim undo shapes", function()
       "┊│ + x                      #3",
       "├╯ + x                      #2",
       "│  + x                      #1",
-      "╷                           #0",
+      "│                           #0",
     })
   end)
 
@@ -1258,7 +1258,7 @@ describe("history.display with real neovim undo shapes", function()
       "┊│   + x                    #3",
       "┊│   + x                    #2",
       "├w   + x                    #1",
-      "╷                           #0",
+      "│                           #0",
     })
   end)
 
@@ -1304,17 +1304,70 @@ describe("history.display with real neovim undo shapes", function()
       "├╯  + x                    #11",
       "├╯  + x                    #10",
       "┊├╯ + x                     #9",
-      "┊┊╷ + x                     #8",
-      "┊┊╷ + x                     #7",
-      "┊┊╷ + x                     #6",
-      "┊┊╷ + x                     #5",
+      "┊├╯ + x                     #8",
+      "┊├╯ + x                     #7",
+      "┊├╯ + x                     #6",
+      "┊├╯ + x                     #5",
       "┊├╯ + x                     #4",
       "│   + x                     #3",
       "├╯  + x                     #2",
       "├╯  + x                     #1",
-      "╷                           #0",
+      "│                           #0",
     })
   end)
+
+  it(
+    "renders a real seventeen state buffer with two off-trunk roots and a nested branch",
+    function()
+      local parents = {
+        [1] = 0,
+        [2] = 0,
+        [16] = 0,
+        [12] = 1,
+        [13] = 1,
+        [14] = 12,
+        [15] = 14,
+        [3] = 2,
+        [4] = 3,
+        [5] = 4,
+        [6] = 5,
+        [7] = 6,
+        [8] = 7,
+        [9] = 8,
+        [10] = 9,
+        [11] = 10,
+      }
+      local saves = { [1] = 1, [5] = 1, [6] = 1, [11] = 1, [12] = 1, [15] = 1 }
+      local rows = {}
+      for seq = 16, 1, -1 do
+        rows[#rows + 1] =
+          row({ seq = seq, parent = parents[seq], save = saves[seq], added = { "x" } })
+      end
+      rows[#rows + 1] = original()
+      local display =
+        history.display(rows, { width = 30, current = 16, buffer = 16, fold_min = 99 })
+
+      assert_tree_lines(display, {
+        "@   + x                    #16",
+        "┊┊w + x                    #15",
+        "┊┊│ + x                    #14",
+        "┊├╯ + x                    #13",
+        "┊├w + x                    #12",
+        "├w  + x                    #11",
+        "┊│  + x                    #10",
+        "┊│  + x                     #9",
+        "┊│  + x                     #8",
+        "┊│  + x                     #7",
+        "┊w  + x                     #6",
+        "┊w  + x                     #5",
+        "┊│  + x                     #4",
+        "┊│  + x                     #3",
+        "┊│  + x                     #2",
+        "├w  + x                     #1",
+        "│                           #0",
+      })
+    end
+  )
 
   it("weaves the trunk through a middle root branch of a three by three tree", function()
     local parents = fan_out({ 1, 2, 3 }, 3)
@@ -1337,12 +1390,12 @@ describe("history.display with real neovim undo shapes", function()
       "├╯  + x                     #8",
       "├╯  + x                     #7",
       "┊├╯ + x                     #6",
-      "┊┊╷ + x                     #5",
+      "┊├╯ + x                     #5",
       "┊├╯ + x                     #4",
       "├╯  + x                     #3",
       "│   + x                     #2",
       "├╯  + x                     #1",
-      "╷                           #0",
+      "│                           #0",
     })
   end)
 
