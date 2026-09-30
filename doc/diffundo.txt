@@ -6,9 +6,8 @@ CONTENTS                                                     *diffundo-contents*
   1. Command ..................................... |:Diffundo|
   2. Setup ....................................... |diffundo-setup|
   3. Options ..................................... |diffundo-options|
-  4. Pane keys ................................... |diffundo-pane-keys|
-  5. Lua API ..................................... |diffundo-api|
-  6. Repeating ................................... |diffundo-repeat|
+  4. API.......................................... |diffundo-api|
+  5. Repeating ................................... |diffundo-repeat|
 
 ==============================================================================
 1. COMMAND                                                          *:Diffundo*
@@ -38,7 +37,7 @@ CONTENTS                                                     *diffundo-contents*
 
 :Diffundo focus                                              *:Diffundo-focus*
     Open the diff split and focus the history pane: the pane expands into
-    the whole undo tree and takes the focus (see |diffundo-pane-keys|).
+    the whole undo tree and takes the focus (see |diffundo-api|).
 
 :Diffundo close                                              *:Diffundo-close*
     Close the diff split and its pane.
@@ -51,18 +50,49 @@ CONTENTS                                                     *diffundo-contents*
 2. SETUP                                                        *diffundo-setup*
 
 `require("diffundo").setup(opts)` is the only way to configure the plugin.
-It merges |opts| over the built-in defaults below, so every setting is
-optional and the plugin works unchanged with no `setup()` call at all. >lua
+It merges |opts| over the built-in defaults, so every setting is optional
+and the plugin works unchanged with no `setup()` call at all. The
+defaults, pane keymaps included, are: >lua
 
     require("diffundo").setup({
-      history = false,                      -- no history pane
-      glyphs = { write = "ⓦ" },             -- merged over the defaults
-      date_format = "%Y-%m-%d %H:%M:%S",    -- or function(time) -> string
-      history_width = 40,                   -- pane width
-      fold_min = 3,                         -- expanded-view fold threshold
+      -- show the history pane
+      history = true,
+      glyphs = { buffer = "@", write = "w", gap = "┆", ellipsis = "…" },
+      -- or function(time) -> string
+      date_format = "%Y-%m-%d %H:%M:%S",
+       -- pane width
+      history_width = 40,
+       -- expanded-view fold threshold
+      fold_min = 3,
       keys = {
-        pane = {                            -- pane-local keymaps (below)
-          ["<cr>"] = false,                 --   unmap a default binding
+        pane = {
+          -- next written
+          J = function(api) api.move_save(1) end,
+          -- previous written
+          K = function(api) api.move_save(-1) end,
+          -- show under cursor
+          ["<cr>"] = function(api) api.place() end,
+          -- move buffer there
+          ["<c-cr>"] = function(api) api.apply() end,
+          -- collapse, return
+          q = function(api) api.collapse(true) end,
+          -- collapse, return
+          ["<esc>"] = function(api) api.collapse(true) end,
+        },
+      },
+    })
+<
+
+See |diffundo-options| for the semantics of each option. Pane keymaps
+merge per key over these defaults: passing one key replaces only that
+binding and leaves the other five intact. A value of `false` (or an
+empty string) removes the default binding: >lua
+
+    require("diffundo").setup({
+      keys = {
+        pane = {
+                 -- no longer mapped
+          ["<cr>"] = false,
         },
       },
     })
@@ -92,77 +122,48 @@ fold_min (integer, default 3)
     The expanded pane folds off-trunk branch stretches longer than this
     into `┆  N undos` captions.
 
-The old `vim.g.diffundo_history`, `vim.g.diffundo_glyphs`,
-`vim.g.diffundo_date_format`, `vim.g.diffundo_history_width` and
-`vim.g.diffundo_fold_min` variables are removed; set the same options
-through |diffundo-setup| instead.
-
 ==============================================================================
-4. PANE KEYS                                             *diffundo-pane-keys*
+4. API                                                          *diffundo-api*
 
-The pane's default keymaps are pane-local; no global keys are mapped and
-`j`/`k` stay plain motions. Each default value is a Lua function of one
-argument, the facade `api`:
+The pane's keymaps are pane-local; no global keys are mapped and `j`/`k`
+stay plain motions. The default bindings are listed in |diffundo-setup|;
+each value is a plain Lua function of one argument, the facade `api`, a
+table combining the command actions with the pane actions:
 
-    J       function(api) api.move_save(1) end    next written state
-    K       function(api) api.move_save(-1) end   previous written state
-    <cr>    function(api) api.place() end         diff the state under the cursor
-    <c-cr>  function(api) api.apply() end         move the buffer to the state under the cursor
-    q       function(api) api.collapse(true) end  collapse and return to the source
-    <esc>   function(api) api.collapse(true) end  collapse and return to the source
+  api.earlier(count)       Step the diff back by |:earlier| [count].
+  api.later(count)         Step the diff forward by |:later| [count].
+  api.undo(seq)            Show undo state {seq} in the diff split.
+  api.search(needle, opts) Show the state whose edit added a line
+                           matching {needle}; opts.removed = true
+                           searches removals.
+  api.focus()              Open the diff split and focus the expanded
+                           pane.
+  api.close()              Close the diff split and its pane.
+  api.move_save(dir)       Move the pane cursor to the next (1) or
+                           previous (-1) written state.
+  api.place()              Put the state under the cursor in the diff
+                           split.
+  api.apply()              Move the buffer itself to the state under the
+                           cursor; the diff stays where it is.
+  api.collapse(back)       Collapse the pane; with `true`, return to the
+                           source window.
 
-Configure them through the `keys.pane` option: the table merges per key
-over these defaults, so passing `<cr>` alone replaces only that binding and
-leaves the other five intact. A value of `false` (or an empty string)
-removes the default binding for that key. >lua
+For example, requiring the module to bind a pane key to a facade call
+that steps the diff back two undo states: >lua
 
-    require("diffundo").setup({
+    local diffundo = require("diffundo")
+
+    diffundo.setup({
       keys = {
         pane = {
-          ["<cr>"] = false,                              -- no longer mapped
-          H = function(api) api.move_save(-1) end,       -- add a binding
-          x = function(api) api.earlier() end,           -- commands work too
+          x = function(api) api.earlier("2") end,
         },
       },
     })
 <
 
-The facade `api` is one table combining the command actions |:Diffundo|
-exposes (`earlier`, `later`, `undo`, `search`, `focus`, `close`) with the
-pane actions (`move_save`, `place`, `apply`, `collapse`), so a replacement
-function receives everything it needs from its single argument.
-
 ==============================================================================
-5. LUA API                                                        *diffundo-api*
-
-All functions leave the current window and cursor unchanged and raise
-errors instead of printing them. >lua
-
-    local diffundo = require("diffundo")
-    diffundo.setup(opts)                 -- see |diffundo-setup|
-    diffundo.earlier(count)              -- count: string|nil, as :earlier
-    diffundo.later(count)
-    diffundo.search(pattern, opts)       -- opts.removed = true for search!
-<
-`search` returns nil when nothing matches, otherwise a table: >
-    { seq, time, save, line, col, lnum }
-<
-`seq` is the state shown in the split, `line` the matched text, `col` the
-0-based match column and `lnum` the line's number in the state that had it.
-
-`require("diffundo.walker").steps(from_seq)` returns an iterator over undo
-states with seq below `from_seq`, newest first, each `{ seq, parent,
-time, save, lines, parent_lines, added, removed }`. It runs |:undo| in the
-current buffer, so call it with the source buffer current and restore
-afterwards.
-
-`require("diffundo.history").rows(opts)` produces the sidebar's list the
-same way: newest first, each `{ seq, time, save, added, removed, label }`,
-with a `…older…` sentinel row once `opts.limit` (default 500) states are
-reached.
-
-==============================================================================
-6. REPEATING                                                   *diffundo-repeat*
+5. REPEATING                                                   *diffundo-repeat*
 
 With tpope/vim-repeat installed, |.| runs the last :Diffundo command
 again with the same arguments.
