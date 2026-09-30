@@ -1,3 +1,5 @@
+.DS_Store
+
 lua_modules/
 .luals/
 
