@@ -1262,6 +1262,90 @@ describe("history.display with real neovim undo shapes", function()
     })
   end)
 
+  ---@param roots integer[]
+  ---@param kids integer
+  ---@return table<integer, integer>
+  local function fan_out(roots, kids)
+    local parents = { [0] = 0 }
+    for _, root in ipairs(roots) do
+      parents[root] = 0
+    end
+    local child = #roots + 1
+    for _, root in ipairs(roots) do
+      for _ = 1, kids do
+        parents[child] = root
+        child = child + 1
+      end
+    end
+    return parents
+  end
+
+  ---@param parents table<integer, integer>
+  ---@param top integer
+  ---@return diffundo.Row[]
+  local function rows_from(parents, top)
+    local rows = {}
+    for seq = top, 1, -1 do
+      rows[#rows + 1] = row({ seq = seq, parent = parents[seq], added = { "x" } })
+    end
+    rows[#rows + 1] = original()
+    return rows
+  end
+
+  it("renders a root with three children, each with three children", function()
+    local parents = fan_out({ 1, 2, 3 }, 3)
+    local display = history.display(
+      rows_from(parents, 12),
+      { width = 30, current = 12, buffer = 12, fold_min = 99 }
+    )
+
+    assert_tree_lines(display, {
+      "@   + x                    #12",
+      "├╯  + x                    #11",
+      "├╯  + x                    #10",
+      "┊├╯ + x                     #9",
+      "┊┊╷ + x                     #8",
+      "┊┊╷ + x                     #7",
+      "┊┊╷ + x                     #6",
+      "┊┊╷ + x                     #5",
+      "┊├╯ + x                     #4",
+      "│   + x                     #3",
+      "├╯  + x                     #2",
+      "├╯  + x                     #1",
+      "╷                           #0",
+    })
+  end)
+
+  it("weaves the trunk through a middle root branch of a three by three tree", function()
+    local parents = fan_out({ 1, 2, 3 }, 3)
+    parents[12] = nil
+    parents[13] = 9
+    local order = { 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 }
+    local rows = {}
+    for _, seq in ipairs(order) do
+      rows[#rows + 1] = row({ seq = seq, parent = parents[seq], added = { "x" } })
+    end
+    rows[#rows + 1] = original()
+
+    local display = history.display(rows, { width = 30, current = 13, buffer = 13, fold_min = 99 })
+
+    assert_tree_lines(display, {
+      "@   + x                    #13",
+      "┊├╯ + x                    #11",
+      "┊├╯ + x                    #10",
+      "│   + x                     #9",
+      "├╯  + x                     #8",
+      "├╯  + x                     #7",
+      "┊├╯ + x                     #6",
+      "┊┊╷ + x                     #5",
+      "┊├╯ + x                     #4",
+      "├╯  + x                     #3",
+      "│   + x                     #2",
+      "├╯  + x                     #1",
+      "╷                           #0",
+    })
+  end)
+
   it("puts the write pip in the junction caps of a real saved branch", function()
     local rows = {
       row({ seq = 4, parent = 1, added = { "x" } }),

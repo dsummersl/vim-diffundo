@@ -164,6 +164,21 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    name:
+      "root with three children, each with three children (a; undo 0 b; undo 0 c; then abc off each)",
+    build: async (denops) => {
+      await state(denops, ["one"]);
+      await denops.cmd("silent undo 0");
+      await state(denops, ["two"]);
+      await denops.cmd("silent undo 0");
+      await state(denops, ["three"]);
+      for (const [root, tag] of [["one", "a"], ["one", "b"], ["one", "c"], ["two", "a"], ["two", "b"], ["two", "c"], ["three", "a"], ["three", "b"], ["three", "c"]]) {
+        await denops.cmd(`silent undo ${root === "one" ? 1 : root === "two" ? 2 : 3}`);
+        await state(denops, [root, tag]);
+      }
+    },
+  },
+  {
     name: "saves on trunk then branch (write each; undo 1; ax)",
     build: async (denops) => {
       const path = await denops.call("tempname") as string;
