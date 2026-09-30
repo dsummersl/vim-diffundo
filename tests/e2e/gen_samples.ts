@@ -29,6 +29,12 @@ async function state(denops: Denops, lines: string[]): Promise<void> {
   await denops.cmd("let &undolevels = &undolevels");
 }
 
+async function grow(denops: Denops, lines: string[], count: number): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    await state(denops, [...lines, String.fromCharCode(97 + i)]);
+  }
+}
+
 async function paneLines(denops: Denops): Promise<string[]> {
   const win = await denops.eval("get(t:, 'diffundo_pane_win', 0)") as number;
   if (!win) return [];
@@ -131,6 +137,30 @@ const scenarios: Scenario[] = [
       await state(denops, ["a"]);
       await denops.cmd("silent undo 0");
       await state(denops, ["z"]);
+    },
+  },
+  {
+    name:
+      "undo 0 branch with a trunk kept alive (a; undo 0; b..k; undo 1; a p..u)",
+    build: async (denops) => {
+      await state(denops, ["one"]);
+      await denops.cmd("silent undo 0");
+      await grow(denops, ["two"], 10);
+      await denops.cmd("silent undo 1");
+      await grow(denops, ["one", "p"], 6);
+    },
+  },
+  {
+    name:
+      "undo 0 branch holding a nested third lane (a; undo 0; b; bc; bcd; undo 3; bcy; undo 1; a p; a pq; a pqr)",
+    build: async (denops) => {
+      await state(denops, ["one"]);
+      await denops.cmd("silent undo 0");
+      await grow(denops, ["two"], 3);
+      await denops.cmd("silent undo 3");
+      await state(denops, ["two", "b", "c", "y"]);
+      await denops.cmd("silent undo 1");
+      await grow(denops, ["one", "p"], 3);
     },
   },
   {

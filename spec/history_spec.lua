@@ -1142,7 +1142,7 @@ describe("history.display with real neovim undo shapes", function()
     })
   end)
 
-  it("renders a real branch off the original text", function()
+  it("renders a real branch off the original text on its own lane", function()
     local rows = {
       row({ seq = 2, parent = 0, added = { "z" }, removed = { "" } }),
       row({ seq = 1, parent = 0, added = { "a" }, removed = { "" } }),
@@ -1150,8 +1150,115 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 2 })
 
     assert_tree_lines(display, {
-      "╷ ~z~                                 #2",
-      "╷ ~a~                                 #1",
+      "╷  ~z~                                #2",
+      "├╯ ~a~                                #1",
+    })
+  end)
+
+  it("keeps a real undo 0 branch off the trunk lane it leaves", function()
+    local rows = {
+      row({ seq = 5, parent = 4, added = { "u" } }),
+      row({ seq = 4, parent = 3, added = { "t" } }),
+      row({ seq = 3, parent = 1, added = { "s" } }),
+      row({ seq = 2, parent = 1, added = { "b" } }),
+      row({ seq = 1, parent = 0, added = { "a" }, removed = { "" } }),
+    }
+    local display = history.display(rows, { width = 40, current = 5, fold_min = 9 })
+
+    assert_tree_lines(display, {
+      "╷  + u                                #5",
+      "│  + t                                #4",
+      "│  + s                                #3",
+      "├╯ + b                                #2",
+      "│  ~a~                                #1",
+    })
+  end)
+
+  it("splits an undo 0 branch onto a second lane", function()
+    local parents = { [0] = 0, [1] = 0, [2] = 0, [12] = 1 }
+    for seq = 3, 11 do
+      parents[seq] = seq - 1
+    end
+    for seq = 13, 17 do
+      parents[seq] = seq - 1
+    end
+    local rows = {}
+    for seq = 17, 1, -1 do
+      rows[#rows + 1] = row({ seq = seq, parent = parents[seq], added = { "x" } })
+    end
+    rows[#rows + 1] = original()
+
+    local display = history.display(rows, { width = 30, current = 17, fold_min = 99 })
+
+    assert_tree_lines(display, {
+      "╷  + x                     #17",
+      "│  + x                     #16",
+      "│  + x                     #15",
+      "│  + x                     #14",
+      "│  + x                     #13",
+      "│  + x                     #12",
+      "├╯ + x                     #11",
+      "┊│ + x                     #10",
+      "┊│ + x                      #9",
+      "┊│ + x                      #8",
+      "┊│ + x                      #7",
+      "┊│ + x                      #6",
+      "┊│ + x                      #5",
+      "┊│ + x                      #4",
+      "┊│ + x                      #3",
+      "├╯ + x                      #2",
+      "│  + x                      #1",
+      "╷                           #0",
+    })
+  end)
+
+  it("caps a written first change on its own branch lane", function()
+    local parents = {
+      [0] = 0,
+      [1] = 0,
+      [2] = 0,
+      [12] = 1,
+      [13] = 1,
+      [14] = 13,
+      [15] = 13,
+      [16] = 0,
+      [17] = 0,
+    }
+    for seq = 3, 11 do
+      parents[seq] = seq - 1
+    end
+    local rows = {}
+    for seq = 17, 1, -1 do
+      rows[#rows + 1] = row({
+        seq = seq,
+        parent = parents[seq],
+        added = { "x" },
+        save = seq == 1 and 1 or nil,
+      })
+    end
+    rows[#rows + 1] = original()
+
+    local display = history.display(rows, { width = 30, current = 17, fold_min = 99 })
+
+    assert_tree_lines(display, {
+      "╷    + x                   #17",
+      "├╯   + x                   #16",
+      "┊┊├╯ + x                   #15",
+      "┊┊├╯ + x                   #14",
+      "┊├╯  + x                   #13",
+      "┊├╯  + x                   #12",
+      "├╯   + x                   #11",
+      "┊│   + x                   #10",
+      "┊│   + x                    #9",
+      "┊│   + x                    #8",
+      "┊│   + x                    #7",
+      "┊│   + x                    #6",
+      "┊│   + x                    #5",
+      "┊│   + x                    #4",
+      "┊│   + x                    #3",
+      "┊│   + x                    #2",
+      "├w   + x                    #1",
+      "╷                           #0",
     })
   end)
 

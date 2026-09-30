@@ -209,7 +209,7 @@ end
 ---@param seq_index table<integer, integer>
 ---@return table<integer, boolean>
 local function trunk_of(view, seq_index)
-  local trunk = {}
+  local trunk = { [0] = true }
   local i = 1
   while i do
     local r = view[i]
@@ -225,22 +225,28 @@ local function trunk_of(view, seq_index)
   return trunk
 end
 
----@param seq_index table<integer, integer>
----@param children integer[][]
 ---@param view diffundo.Row[]
----@param lane integer[]
----@param i integer
----@return integer|nil
-local function branch_lane(seq_index, children, view, lane, i)
-  local parent = seq_index[view[i].parent]
-  if not parent or not lane[parent] then
-    return nil
+---@param seq_index table<integer, integer>
+---@param trunk table<integer, boolean>
+---@return integer[]
+local function root_lanes(view, seq_index, trunk)
+  local lanes = {}
+  for i, r in ipairs(view) do
+    if seq_index[r.parent] == nil then
+      lanes[i] = trunk[r.seq] and 1 or 2
+    end
   end
-  local kids = children[parent]
+  return lanes
+end
+
+---@param kids integer[]
+---@param parent_lane integer
+---@return integer
+local function branch_lane(kids, parent_lane)
   if #kids == 1 then
-    return lane[parent]
+    return parent_lane
   end
-  return lane[parent] + 1
+  return parent_lane + 1
 end
 
 ---@param view diffundo.Row[]
@@ -249,27 +255,17 @@ end
 ---@param trunk table<integer, boolean>
 ---@return integer[]
 local function lane_for(view, seq_index, children, trunk)
+  local roots = root_lanes(view, seq_index, trunk)
   local lane = {}
   for i = #view, 1, -1 do
-    if view[i].parent == 0 or trunk[view[i].seq] then
+    local root = roots[i]
+    local parent = seq_index[view[i].parent]
+    if root then
+      lane[i] = root
+    elseif trunk[view[i].seq] then
       lane[i] = 1
     else
-      lane[i] = branch_lane(seq_index, children, view, lane, i)
-    end
-  end
-  return lane
-end
-
----@param view diffundo.Row[]
----@param lane integer[]
----@return integer[]
-local function fill_lanes(view, lane)
-  local prev = 0
-  for i = 1, #view do
-    if lane[i] then
-      prev = lane[i]
-    else
-      lane[i] = prev + 1
+      lane[i] = branch_lane(children[parent], lane[parent])
     end
   end
   return lane
@@ -330,18 +326,42 @@ end
 ---@param view diffundo.Row[]
 ---@param children integer[][]
 ---@param trunk table<integer, boolean>
----@return table<integer, table<integer, boolean>>
-local function open_columns(view, children, lane, first, last, trunk)
-  local open = {}
+---@return integer[]
+local function child_arms(view, children, trunk)
+  local arms = {}
   for i = 1, #view do
-    local kids = children[i]
-    if kids then
-      for _, arm in ipairs(kids) do
-        if trunk[view[arm].seq] == nil then
-          mark_open(open, lane[arm], first[arm], last[arm])
-        end
+    for _, arm in ipairs(children[i] or {}) do
+      if trunk[view[arm].seq] == nil then
+        arms[#arms + 1] = arm
       end
     end
+  end
+  return arms
+end
+
+---@param view diffundo.Row[]
+---@param seq_index table<integer, integer>
+---@param trunk table<integer, boolean>
+---@return integer[]
+local function root_arms(view, seq_index, trunk)
+  local arms = {}
+  for i, r in ipairs(view) do
+    if seq_index[r.parent] == nil and trunk[r.seq] == nil then
+      arms[#arms + 1] = i
+    end
+  end
+  return arms
+end
+
+---@param lane integer[]
+---@param first integer[]
+---@param last integer[]
+---@param arms integer[]
+---@return table<integer, table<integer, boolean>>
+local function open_columns(lane, first, last, arms)
+  local open = {}
+  for _, arm in ipairs(arms) do
+    mark_open(open, lane[arm], first[arm], last[arm])
   end
   return open
 end
@@ -369,16 +389,14 @@ local function topology_for(view)
   local seq_index = seq_index_for(view)
   local children = children_for(view, seq_index)
   local trunk = trunk_of(view, seq_index)
-  local lane = fill_lanes(view, lane_for(view, seq_index, children, trunk))
-  local open = open_columns(
-    view,
-    children,
-    lane,
-    subtree_starts(view, children),
-    subtree_ends(view, children),
-    trunk
-  )
-  return lane, open, heads_for(view, seq_index)
+  local lane = lane_for(view, seq_index, children, trunk)
+  local first = subtree_starts(view, children)
+  local last = subtree_ends(view, children)
+  local arms = child_arms(view, children, trunk)
+  for _, arm in ipairs(root_arms(view, seq_index, trunk)) do
+    arms[#arms + 1] = arm
+  end
+  return lane, open_columns(lane, first, last, arms), heads_for(view, seq_index)
 end
 
 ---@param i integer
