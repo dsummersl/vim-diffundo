@@ -1,3 +1,5 @@
+local config = require("diffundo.config")
+
 local M = {}
 
 ---@class diffundo.Glyphs
@@ -7,19 +9,11 @@ local M = {}
 ---@field ellipsis string
 
 ---@type diffundo.Glyphs
-M.defaults = { buffer = "@", write = "w", gap = "┆", ellipsis = "…" }
+M.defaults = config.defaults.glyphs
 
 ---@return diffundo.Glyphs
 function M.get()
-  ---@type diffundo.Glyphs
-  local merged = { buffer = "", write = "", gap = "", ellipsis = "" }
-  for key, value in pairs(M.defaults) do
-    merged[key] = value
-  end
-  for key, value in pairs(vim.g.diffundo_glyphs or {}) do
-    merged[key] = value
-  end
-  return merged
+  return config.get().glyphs
 end
 
 return M

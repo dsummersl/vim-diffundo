@@ -1,3 +1,4 @@
+local config = require("diffundo.config")
 local fakevim = require("spec.fakevim")
 local label = require("diffundo.label")
 
@@ -36,28 +37,31 @@ describe("label.date and label.title", function()
   before_each(function()
     vim = fakevim.new(fakevim.history({ {}, { "first" } }))
     vim:install()
+    config.setup(nil)
   end)
 
   it("formats with the default date format", function()
     assert.are.equal(os.date("%Y-%m-%d %H:%M:%S", 1627784719), label.date(1627784719))
   end)
 
-  it("uses g:diffundo_date_format when it is a strftime string", function()
-    vim.g.diffundo_date_format = "%H:%M"
+  it("uses setup's date_format when it is a strftime string", function()
+    config.setup({ date_format = "%H:%M" })
 
     assert.are.equal(os.date("%H:%M", 1627784719), label.date(1627784719))
   end)
 
-  it("calls g:diffundo_date_format when it is a function", function()
-    vim.g.diffundo_date_format = function(time)
-      return "at " .. time
-    end
+  it("calls setup's date_format when it is a function", function()
+    config.setup({
+      date_format = function(time)
+        return "at " .. time
+      end,
+    })
 
     assert.are.equal("at 5", label.date(5))
   end)
 
   it("titles a state with its number and date, and #0 with its number alone", function()
-    vim.g.diffundo_date_format = "%Y"
+    config.setup({ date_format = "%Y" })
 
     assert.are.equal("#4  " .. os.date("%Y", 1627784719), label.title(4, 1627784719))
     assert.are.equal("#0", label.title(0, 0))

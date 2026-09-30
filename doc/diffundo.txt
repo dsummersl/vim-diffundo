@@ -4,8 +4,11 @@
 CONTENTS                                                     *diffundo-contents*
 
   1. Command ..................................... |:Diffundo|
-  2. Lua API ..................................... |diffundo-api|
-  3. Repeating ................................... |diffundo-repeat|
+  2. Setup ....................................... |diffundo-setup|
+  3. Options ..................................... |diffundo-options|
+  4. Pane keys ................................... |diffundo-pane-keys|
+  5. Lua API ..................................... |diffundo-api|
+  6. Repeating ................................... |diffundo-repeat|
 
 ==============================================================================
 1. COMMAND                                                          *:Diffundo*
@@ -33,32 +36,113 @@ CONTENTS                                                     *diffundo-contents*
     (its parent in the undo tree, see |undo-branches|), so switching
     branches never counts as an addition or removal.
 
-:Diffundo history                                          *:Diffundo-history*
-    Open or toggle the floating history sidebar: one line per undo state
-    with a one-line preview of what that edit changed. In the sidebar
-    j/k move by change, J/K between written states, <cr> shows the
-    selected state in the diff split, <c-cr> moves the buffer itself to
-    the selected state, and q or <esc> closes it.
+:Diffundo focus                                              *:Diffundo-focus*
+    Open the diff split and focus the history pane: the pane expands into
+    the whole undo tree and takes the focus (see |diffundo-pane-keys|).
 
-    The |:Diffundo-earlier|, |:Diffundo-later| and |:Diffundo-search|
-    commands open the float by default; a leading -no-history flag or
-    g:diffundo_history = false keeps the minimal layout, and
-    g:diffundo_history_width (default 40) sets the width.
+:Diffundo close                                              *:Diffundo-close*
+    Close the diff split and its pane.
 
-The diff window's 'statusline' shows the timestamp and sequence number
-(|changenr()|) of the state it displays; when the editor uses a 'winbar' it
-is shown there too, so the diff lines never shift a row off the source.
+    Every subcommand opens a floating history pane next to the diff window
+    showing the buffer's state and the diff's state, unless the pane is
+    disabled with the `history` option (see |diffundo-options|).
 
 ==============================================================================
-2. LUA API                                                        *diffundo-api*
+2. SETUP                                                        *diffundo-setup*
+
+`require("diffundo").setup(opts)` is the only way to configure the plugin.
+It merges |opts| over the built-in defaults below, so every setting is
+optional and the plugin works unchanged with no `setup()` call at all. >lua
+
+    require("diffundo").setup({
+      history = false,                      -- no history pane
+      glyphs = { write = "ⓦ" },             -- merged over the defaults
+      date_format = "%Y-%m-%d %H:%M:%S",    -- or function(time) -> string
+      history_width = 40,                   -- pane width
+      fold_min = 3,                         -- expanded-view fold threshold
+      keys = {
+        pane = {                            -- pane-local keymaps (below)
+          ["<cr>"] = false,                 --   unmap a default binding
+        },
+      },
+    })
+<
+
+==============================================================================
+3. OPTIONS                                                    *diffundo-options*
+
+history (boolean, default true)
+    When false, the commands open the diff split without the history pane.
+
+glyphs (table, merged over `{ buffer = "@", write = "w", gap = "┆",
+ellipsis = "…" }`)
+    Glyphs the pane draws: `buffer` marks your buffer's state, `write` a
+    state written to disk, `gap` the gap-row and fold-caption prefix,
+    `ellipsis` the truncation marker.
+
+date_format (string, or function(time: integer): string; default
+"%Y-%m-%d %H:%M:%S")
+    Formats the state timestamps in the pane's border title. A function is
+    called with the state's time and must return the title text.
+
+history_width (integer, default 40)
+    The pane's width in columns, clamped to the diff window.
+
+fold_min (integer, default 3)
+    The expanded pane folds off-trunk branch stretches longer than this
+    into `┆  N undos` captions.
+
+The old `vim.g.diffundo_history`, `vim.g.diffundo_glyphs`,
+`vim.g.diffundo_date_format`, `vim.g.diffundo_history_width` and
+`vim.g.diffundo_fold_min` variables are removed; set the same options
+through |diffundo-setup| instead.
+
+==============================================================================
+4. PANE KEYS                                             *diffundo-pane-keys*
+
+The pane's default keymaps are pane-local; no global keys are mapped and
+`j`/`k` stay plain motions. Each default value is a Lua function of one
+argument, the facade `api`:
+
+    J       function(api) api.move_save(1) end    next written state
+    K       function(api) api.move_save(-1) end   previous written state
+    <cr>    function(api) api.place() end         diff the state under the cursor
+    <c-cr>  function(api) api.apply() end         move the buffer to the state under the cursor
+    q       function(api) api.collapse(true) end  collapse and return to the source
+    <esc>   function(api) api.collapse(true) end  collapse and return to the source
+
+Configure them through the `keys.pane` option: the table merges per key
+over these defaults, so passing `<cr>` alone replaces only that binding and
+leaves the other five intact. A value of `false` (or an empty string)
+removes the default binding for that key. >lua
+
+    require("diffundo").setup({
+      keys = {
+        pane = {
+          ["<cr>"] = false,                              -- no longer mapped
+          H = function(api) api.move_save(-1) end,       -- add a binding
+          x = function(api) api.earlier() end,           -- commands work too
+        },
+      },
+    })
+<
+
+The facade `api` is one table combining the command actions |:Diffundo|
+exposes (`earlier`, `later`, `undo`, `search`, `focus`, `close`) with the
+pane actions (`move_save`, `place`, `apply`, `collapse`), so a replacement
+function receives everything it needs from its single argument.
+
+==============================================================================
+5. LUA API                                                        *diffundo-api*
 
 All functions leave the current window and cursor unchanged and raise
 errors instead of printing them. >lua
 
     local diffundo = require("diffundo")
-    diffundo.earlier(count)            -- count: string|nil, as :earlier
+    diffundo.setup(opts)                 -- see |diffundo-setup|
+    diffundo.earlier(count)              -- count: string|nil, as :earlier
     diffundo.later(count)
-    diffundo.search(pattern, opts)     -- opts.removed = true for search!
+    diffundo.search(pattern, opts)       -- opts.removed = true for search!
 <
 `search` returns nil when nothing matches, otherwise a table: >
     { seq, time, save, line, col, lnum }
@@ -78,7 +162,7 @@ with a `…older…` sentinel row once `opts.limit` (default 500) states are
 reached.
 
 ==============================================================================
-3. REPEATING                                                   *diffundo-repeat*
+6. REPEATING                                                   *diffundo-repeat*
 
 With tpope/vim-repeat installed, |.| runs the last :Diffundo command
 again with the same arguments.

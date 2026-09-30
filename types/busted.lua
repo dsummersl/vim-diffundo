@@ -54,5 +54,6 @@ function teardown(block) end
 ---@field matches fun(pattern: string, actual: string, message?: string)
 ---@field not_matches fun(pattern: string, actual: string, message?: string)
 ---@field has_error fun(fn: function, message?: string)
+---@field is_function fun(value: any, message?: string)
 ---@overload fun(value: any, message?: string): any
 assert = {}

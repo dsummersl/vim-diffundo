@@ -166,7 +166,7 @@ async function assertDiffSplit(
 
   const panes = await floats(denops);
   if (expected.pane === false) {
-    assertEquals(panes.length, 0, "no pane with g:diffundo_history off");
+    assertEquals(panes.length, 0, "no pane with the history off");
   } else {
     // WHY: the pane rides the diff window and never takes the focus.
     assertEquals(panes.length, 1, "expected exactly one pane float");
@@ -191,9 +191,13 @@ async function assertDiffSplit(
   assertEquals([undoBuffer.diff, sourceBuffer.diff], [1, 1]);
 
   // WHY: no statusline or winbar label on the diff window, so its lines stay
-  // on the same screen rows as the source window's.
+  // on the same screen rows as the source window's. The diff window must
+  // inherit the global values rather than set its own.
   assert(undoBuffer.name.endsWith(`/#${expected.undonr}`), undoBuffer.name);
-  assertEquals([undoBuffer.statusline, undoBuffer.winbar], ["", ""]);
+  assertEquals(
+    [undoBuffer.statusline, undoBuffer.winbar],
+    await denops.eval("[&g:statusline, &g:winbar]"),
+  );
   assertEquals(
     [sourceBuffer.statusline, sourceBuffer.winbar],
     await denops.eval("[&g:statusline, &g:winbar]"),
@@ -722,11 +726,6 @@ test({
     ]);
     assertEquals(await denops.eval("t:diffundo_diff_undonr"), 2);
 
-    await denops.call("feedkeys", "g?", "x");
-    const hint = await denops.call("execute", "messages") as string;
-    assert(hint.includes("J/K written"), hint);
-    await denops.cmd("messages clear");
-
     await denops.call("feedkeys", "q", "x");
     assertEquals(await denops.call("nvim_get_current_win"), source);
     assertEquals(await paneLines(denops), [
@@ -965,7 +964,7 @@ test({
 
 test({
   mode: "nvim",
-  name: ":Diffundo search and / narrow the pane to the matching states",
+  name: ":Diffundo search narrows the pane to the matching states",
   prelude,
   fn: async (denops) => {
     await denops.cmd("enew");
@@ -990,29 +989,17 @@ test({
     // WHY: a plain step clears the filter; #3 is two lines behind the buffer.
     await denops.cmd("Diffundo earlier");
     assertEquals((await paneLabels(denops)).footer, " +2 -0 lines ");
-
-    await denops.cmd("Diffundo focus");
-    await denops.call("feedkeys", "/x\r", "x");
-    assertEquals(await paneLines(denops), [
-      "┆   1 undo",
-      "│ + x2                                #4",
-      "┆   1 undo",
-      "│ + x1                                #2",
-      "┆   1 undo",
-    ]);
-    assertEquals(await denops.call("line", "."), 2);
-    assertEquals((await paneLabels(denops)).footer, " filter: x ");
   },
 });
 
 test({
   mode: "nvim",
-  name: "g:diffundo_history = v:false keeps the minimal layout",
+  name: "setup({ history = false }) keeps the minimal layout",
   prelude,
   fn: async (denops) => {
     await denops.cmd("enew");
     await buildHistory(denops, [["one"], ["one", "two"]]);
-    await denops.cmd("let g:diffundo_history = v:false");
+    await denops.cmd("lua require('diffundo').setup({ history = false })");
 
     await denops.cmd("Diffundo earlier");
 
@@ -1022,5 +1009,59 @@ test({
       undonr: 1,
       pane: false,
     });
+  },
+});
+
+test({
+  mode: "nvim",
+  name: "setup() replaces a pane keymap with a facade call and disables another",
+  prelude,
+  fn: async (denops) => {
+    await denops.cmd("enew");
+    await buildHistory(denops, [["one"], ["one", "two"], [
+      "one",
+      "two",
+      "three",
+    ]]);
+    // WHY: <cr> becomes api.apply (move the buffer, keep the diff) and <esc>
+    // is dropped, so q is the only way out of the expanded pane.
+    await denops.cmd(
+      "lua require('diffundo').setup({ keys = { pane = { ['<cr>'] = function(api) api.apply() end, ['<esc>'] = false } } })",
+    );
+
+    await denops.cmd("Diffundo earlier");
+    await denops.cmd("Diffundo focus");
+
+    // WHY: the pane opens on the diff's row (#2); #1 is the row below it.
+    await denops.call("feedkeys", "j", "x");
+    await denops.call("nvim_input", "<CR>");
+    await denops.call("wait", 100, "v:false");
+
+    await assertNoErrors(denops);
+    const windows = await windowStates(denops);
+    const diff = windows.find((w) => w.buftype === "nofile");
+    const source = windows.find((w) => w.buftype === "");
+    assert(diff && source, "both split windows still open");
+    assertEquals(source.lines, ["one"]);
+    assertEquals(diff.lines, ["one", "two"]);
+    assertEquals(await denops.eval("t:diffundo_diff_undonr"), 2);
+    assertEquals(
+      await denops.call("nvim_get_current_win"),
+      await paneWin(denops),
+    );
+
+    // WHY: <esc> is unmapped, so it no longer collapses the pane.
+    await denops.call("nvim_input", "\u{1b}");
+    await denops.call("wait", 100, "v:false");
+    assertEquals(
+      await denops.call("nvim_get_current_win"),
+      await paneWin(denops),
+    );
+    assert((await floatConfig(denops, await paneWin(denops))).focusable);
+
+    // WHY: q keeps its default binding and still returns to the source.
+    await denops.call("feedkeys", "q", "x");
+    assertEquals(await denops.eval("&buftype"), "");
+    assert(!((await floatConfig(denops, await paneWin(denops))).focusable));
   },
 });

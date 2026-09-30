@@ -1,4 +1,6 @@
+local api = require("diffundo.api")
 local cache = require("diffundo.cache")
+local config = require("diffundo.config")
 local glyphs = require("diffundo.glyphs")
 local history = require("diffundo.history")
 local label = require("diffundo.label")
@@ -37,7 +39,7 @@ end
 
 ---@return boolean
 local function disabled()
-  return vim.g.diffundo_history == false
+  return config.get().history == false
 end
 
 ---@param fn fun(): any
@@ -182,7 +184,7 @@ end
 ---@param dwin integer
 ---@return integer
 local function width_for(dwin)
-  local wanted = vim.g.diffundo_history_width or 40
+  local wanted = config.get().history_width
   return math.max(10, math.min(wanted, vim.api.nvim_win_get_width(dwin) - 2))
 end
 
@@ -396,33 +398,25 @@ end
 
 ---@param win integer
 local function map_keys(win)
-  window.map(win, "J", function()
-    M.move_save(1)
-  end)
-  window.map(win, "K", function()
-    M.move_save(-1)
-  end)
-  window.map(win, "<cr>", M.place)
-  window.map(win, "<c-cr>", M.apply)
-  window.map(win, "q", function()
-    M.collapse(true)
-  end)
-  window.map(win, "<esc>", function()
-    M.collapse(true)
-  end)
+  local keys = config.get().keys.pane
+  for lhs, action in pairs(keys) do
+    window.map(win, lhs, function()
+      action(api)
+    end)
+  end
 end
 
----@param config table
+---@param win_config table
 ---@return integer
-local function ensure_float(config)
+local function ensure_float(win_config)
   local win = pane_win()
   if window.is_open(win) then
     ---@cast win integer
-    vim.api.nvim_win_set_config(win, config)
+    vim.api.nvim_win_set_config(win, win_config)
     return win
   end
   define_highlights()
-  local opened = window.open(config, false)
+  local opened = window.open(win_config, false)
   vim.t.diffundo_pane_win = opened
   map_keys(opened)
   watch(opened)
@@ -448,7 +442,7 @@ function M.render()
     buffer = buffer,
     current = current,
     keep = keep_for(all, buffer, current),
-    fold_min = vim.g.diffundo_fold_min or 3,
+    fold_min = config.get().fold_min,
     glyphs = glyphs.get(),
   })
   local height = height_for(dwin, #display.lines)
@@ -651,24 +645,6 @@ function M.set_filter(needle, removed)
   vim.t.diffundo_pane_filter = { pattern = needle, removed = removed == true }
 end
 
-local function select_first_match()
-  for _, seq in ipairs(vim.t.diffundo_pane_seqs or {}) do
-    if seq >= 0 then
-      select_seq(seq)
-      return
-    end
-  end
-end
-
-function M.filter()
-  M.set_filter(vim.fn.input("filter: "), false)
-  M.render()
-  if active_filter() then
-    select_first_match()
-  end
-  M.update_labels()
-end
-
 function M.close()
   local win = pane_win()
   if window.is_open(win) then
@@ -686,5 +662,10 @@ function M.close()
   vim.t.diffundo_pane_captions = nil
   vim.t.diffundo_pane_folds = nil
 end
+
+api.move_save = M.move_save
+api.place = M.place
+api.apply = M.apply
+api.collapse = M.collapse
 
 return M

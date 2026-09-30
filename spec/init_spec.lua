@@ -1,4 +1,5 @@
 local fresh = require
+local config_mod = require("diffundo.config")
 local fakevim = require("spec.fakevim")
 local split = require("diffundo.split")
 
@@ -28,6 +29,7 @@ describe("diffundo", function()
     vim:install()
     package.loaded["diffundo"] = nil
     diffundo = fresh("diffundo")
+    config_mod.setup(nil)
   end)
 
   describe("earlier", function()
@@ -548,6 +550,7 @@ describe("the history pane from commands", function()
       fakevim.history({ {}, { "first" }, { "first", "second" }, { "first", "second", "third" } })
     )
     vim:install()
+    config_mod.setup(nil)
   end)
 
   it("opens collapsed after earlier and leaves the cursor in the source", function()
@@ -597,8 +600,8 @@ describe("the history pane from commands", function()
     assert.are.equal(3, #vim:pane_lines())
   end)
 
-  it("stays closed when g:diffundo_history is false", function()
-    vim.g.diffundo_history = false
+  it("stays closed when setup disables the history", function()
+    diffundo.setup({ history = false })
 
     diffundo.command("search first")
 

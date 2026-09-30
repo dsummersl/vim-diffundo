@@ -1,3 +1,5 @@
+local config = require("diffundo.config")
+
 local M = {}
 
 ---@class diffundo.UndoEntry
@@ -31,7 +33,7 @@ end
 ---@param time integer
 ---@return string
 function M.date(time)
-  local format = vim.g.diffundo_date_format or "%Y-%m-%d %H:%M:%S"
+  local format = config.get().date_format
   if type(format) == "function" then
     return format(time)
   end

@@ -1,4 +1,5 @@
 local cache = require("diffundo.cache")
+local config_mod = require("diffundo.config")
 local fakevim = require("spec.fakevim")
 local pane = require("diffundo.pane")
 local restore = require("diffundo.restore")
@@ -42,6 +43,7 @@ before_each(function()
   vim = fakevim.new(history())
   vim:install()
   cache.reset(vim.source_bn)
+  config_mod.setup(nil)
 end)
 
 describe("pane.render", function()
@@ -66,7 +68,7 @@ describe("pane.render", function()
   end)
 
   it("titles the pane with the diff's state and footers it with the diff size", function()
-    vim.g.diffundo_date_format = "%Y"
+    config_mod.setup({ date_format = "%Y" })
     show(vim, 1)
 
     pane.render()
@@ -85,9 +87,8 @@ describe("pane.render", function()
     assert.are.equal(" +3 -0 lines ", config(vim).footer)
   end)
 
-  it("honors g:diffundo_history_width and g:diffundo_glyphs", function()
-    vim.g.diffundo_history_width = 20
-    vim.g.diffundo_glyphs = { buffer = "B" }
+  it("honors setup's history_width and glyphs", function()
+    config_mod.setup({ history_width = 20, glyphs = { buffer = "B" } })
     show(vim, 2)
 
     pane.render()
@@ -132,8 +133,8 @@ describe("pane.render", function()
     assert.are.same({ bold = true, default = true }, vim.hl_groups.DiffundoBuffer)
   end)
 
-  it("stays closed when g:diffundo_history is false", function()
-    vim.g.diffundo_history = false
+  it("stays closed when setup disables the history", function()
+    config_mod.setup({ history = false })
     show(vim, 2)
 
     pane.render()
@@ -267,7 +268,7 @@ describe("pane.focus", function()
   end)
 
   it("<c-cr> leaves the diff on the state it was showing", function()
-    vim.g.diffundo_date_format = "%Y"
+    config_mod.setup({ date_format = "%Y" })
     vim.api.nvim_win_set_cursor(vim:pane_window(), { 3, 0 })
 
     vim:press("<c-cr>")
@@ -341,50 +342,6 @@ describe("pane.focus", function()
     vim:fire("WinLeave", { buffer = vim.windows[vim:pane_window()].buf })
 
     assert.are.equal(4, #vim:pane_lines())
-  end)
-
-  it("g? notifies the key list", function()
-    vim:press("g?")
-
-    assert.matches("J/K written", vim:last_notification())
-    assert.matches("<c%-cr> go to state", vim:last_notification())
-  end)
-
-  it("/ keeps only the matching rows with gap rows between and footers the filter", function()
-    local asked = "b"
-    vim.fn.input = function()
-      return asked
-    end
-
-    vim:press("/")
-
-    assert.are.same({
-      "┆   1 undo",
-      "│ + b                               #2",
-      "┆   1 undo",
-    }, vim:pane_lines())
-    assert.are.same({ 2, 0 }, vim.windows[vim:pane_window()].cursor)
-    assert.are.equal(" filter: b ", config(vim).footer)
-
-    asked = ""
-    vim:press("/")
-    assert.are.equal(4, #vim:pane_lines())
-    assert.are.equal(" +1 -0 lines ", config(vim).footer)
-  end)
-
-  it("keeps the filter when it collapses", function()
-    vim.fn.input = function()
-      return "a"
-    end
-    vim:press("/")
-
-    vim:press("q")
-
-    assert.are.same(
-      { "┆   2 undos", "│ + a                               #1" },
-      vim:pane_lines()
-    )
-    assert.are.equal(" filter: a ", config(vim).footer)
   end)
 end)
 

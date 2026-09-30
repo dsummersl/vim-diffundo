@@ -1,3 +1,5 @@
+local api = require("diffundo.api")
+local config = require("diffundo.config")
 local count = require("diffundo.count")
 local cursor = require("diffundo.cursor")
 local lines = require("diffundo.lines")
@@ -9,6 +11,11 @@ local subcommand = require("diffundo.subcommand")
 local walker = require("diffundo.walker")
 
 local M = {}
+
+---@param opts diffundo.Opts|nil
+function M.setup(opts)
+  config.setup(opts)
+end
 
 ---@class diffundo.SearchOpts
 ---@field removed boolean|nil
@@ -265,5 +272,12 @@ function M.repeat_last()
     M.command(last_args)
   end
 end
+
+api.earlier = M.earlier
+api.later = M.later
+api.undo = M.undo
+api.search = M.search
+api.focus = M.focus
+api.close = M.close
 
 return M
