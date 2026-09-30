@@ -561,9 +561,9 @@ describe("the history pane from commands", function()
     assert.are.equal(2, vim.t.diffundo_diff_undonr)
     assert.are.equal(source, vim.current_win)
     assert.are.same({
-      "@ + third                           #3",
-      "│ + second                          #2",
-      "┆   1 undo",
+      "@   + third                         #3",
+      "│   + second                        #2",
+      "┆     1 undo",
     }, vim:pane_lines())
   end)
 
@@ -572,9 +572,9 @@ describe("the history pane from commands", function()
     diffundo.repeat_last()
 
     assert.are.same({
-      "@ + third                           #3",
-      "┆   1 undo",
-      "│ + first                           #1",
+      "@   + third                         #3",
+      "┆     1 undo",
+      "│   + first                         #1",
     }, vim:pane_lines())
   end)
 
@@ -582,9 +582,9 @@ describe("the history pane from commands", function()
     diffundo.command("search second")
 
     assert.are.same({
-      "┆   1 undo",
-      "│ + second                          #2",
-      "┆   1 undo",
+      "┆     1 undo",
+      "│   + second                        #2",
+      "┆     1 undo",
     }, vim:pane_lines())
     local config = vim.windows[vim:pane_window()].config
     assert.are.equal(" filter: second ", config.footer)

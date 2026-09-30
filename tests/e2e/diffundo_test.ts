@@ -630,9 +630,9 @@ test({
 
     await denops.cmd("Diffundo earlier");
     assertEquals(await paneLines(denops), [
-      "@ + four                              #4",
-      "│ + three                             #3",
-      "┆   2 undos",
+      "@   + four                            #4",
+      "│   + three                           #3",
+      "┆     2 undos",
     ]);
     const labels = await paneLabels(denops);
     assert(
@@ -643,10 +643,10 @@ test({
 
     await pressDot(denops);
     assertEquals(await paneLines(denops), [
-      "@ + four                              #4",
-      "┆   1 undo",
-      "│ + two                               #2",
-      "┆   1 undo",
+      "@   + four                            #4",
+      "┆     1 undo",
+      "│   + two                             #2",
+      "┆     1 undo",
     ]);
     assertEquals((await paneLabels(denops)).footer, " +2 -0 lines ");
     // WHY: the focus never left the source, so it stays editable.
@@ -680,7 +680,7 @@ test({
     // WHY: the pane re-renders on a scheduled callback.
     await denops.call("wait", 100, "v:false");
     assertEquals(await paneLines(denops), [
-      "@ ~hello~                             #1",
+      "@   hello                             #1",
       "│                                     #0",
     ]);
     assertEquals((await paneLabels(denops)).footer, " +1 -1 lines ");
@@ -720,8 +720,8 @@ test({
     await denops.cmd("Diffundo focus");
 
     await assertExpanded(denops, [
-      "@ + two                               #2",
-      "│ ~one~                               #1",
+      "@   + two                             #2",
+      "│   one                               #1",
       "│                                     #0",
     ]);
     assertEquals(await denops.eval("t:diffundo_diff_undonr"), 2);
@@ -729,8 +729,8 @@ test({
     await denops.call("feedkeys", "q", "x");
     assertEquals(await denops.call("nvim_get_current_win"), source);
     assertEquals(await paneLines(denops), [
-      "@ + two                               #2",
-      "┆   1 undo",
+      "@   + two                             #2",
+      "┆     1 undo",
     ]);
     assertEquals(
       (await floatConfig(denops, await paneWin(denops))).focusable,
@@ -823,9 +823,9 @@ test({
 
     assertEquals(await denops.eval("line('.')"), 2);
     await assertExpanded(denops, [
-      "╷ + three                             #3",
-      "@ + two                               #2",
-      "│ ~one~                               #1",
+      "╷   + three                           #3",
+      "@   + two                             #2",
+      "│   one                               #1",
       "│                                     #0",
     ]);
     // WHY: the footer follows the pane's row, which is now the buffer's state.
@@ -856,10 +856,10 @@ test({
 
     assertEquals(
       await denops.eval("t:diffundo_pane_captions"),
-      { "3": "┆    4 undos" },
+      { "3": "┆      4 undos" },
     );
     assertEquals(await denops.call("foldclosed", 3), 3);
-    assertEquals(await denops.call("foldtextresult", 3), "┆    4 undos");
+    assertEquals(await denops.call("foldtextresult", 3), "┆      4 undos");
     await denops.cmd("3normal! zo");
     assertEquals(await denops.call("foldclosed", 3), -1);
 
@@ -888,20 +888,20 @@ test({
 
     await denops.cmd("Diffundo focus");
     await assertExpanded(denops, [
-      "@  + y                                #5",
-      "├╯ + x                                #4",
-      "┊╷ + c                                #3",
-      "├╯ + b                                #2",
-      "│  ~a~                                #1",
+      "@    + y                              #5",
+      "├╯   + x                              #4",
+      "╎╷   + c                              #3",
+      "├╯   + b                              #2",
+      "│    a                                #1",
       "│                                     #0",
     ]);
 
     await denops.call("feedkeys", "q", "x");
     await denops.cmd("Diffundo earlier");
     assertEquals(await paneLines(denops), [
-      "@  + y                                #5",
-      "├╯ + x                                #4",
-      "┆    3 undos",
+      "@    + y                              #5",
+      "├╯   + x                              #4",
+      "┆      3 undos",
     ]);
   },
 });
@@ -924,19 +924,19 @@ test({
 
     await denops.cmd("Diffundo focus");
     await assertExpanded(denops, [
-      "@  + x                                #4",
-      "├w + c                                #3",
-      "├w + b                                #2",
-      "w  ~a~                                #1",
+      "@    + x                              #4",
+      "├╯ w + c                              #3",
+      "├╯ w + b                              #2",
+      "│  w a                                #1",
       "│                                     #0",
     ]);
 
     await denops.call("feedkeys", "q", "x");
     await denops.cmd("Diffundo earlier");
     assertEquals(await paneLines(denops), [
-      "@  + x                                #4",
-      "├w + c                                #3",
-      "┆    2 undos 2w",
+      "@    + x                              #4",
+      "├╯ w + c                              #3",
+      "┆      2 undos 2w",
     ]);
   },
 });
@@ -955,9 +955,9 @@ test({
     await denops.cmd("Diffundo earlier");
 
     assertEquals(await paneLines(denops), [
-      "┆    2 undos",
-      "├@ + b                                #2",
-      "│  ~a~                                #1",
+      "┆      2 undos",
+      "├@   + b                              #2",
+      "│    a                                #1",
     ]);
   },
 });
@@ -978,11 +978,11 @@ test({
 
     await denops.cmd("Diffundo search x");
     assertEquals(await paneLines(denops), [
-      "┆   1 undo",
-      "│ + x2                                #4",
-      "┆   1 undo",
-      "│ + x1                                #2",
-      "┆   1 undo",
+      "┆     1 undo",
+      "│   + x2                              #4",
+      "┆     1 undo",
+      "│   + x1                              #2",
+      "┆     1 undo",
     ]);
     assertEquals((await paneLabels(denops)).footer, " filter: x ");
 

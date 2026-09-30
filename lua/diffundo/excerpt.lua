@@ -105,8 +105,8 @@ end
 function M.changed(old, new, ellipsis)
   local p = snap_prefix(old, new, common_prefix(old, new))
   local s = snap_suffix(old, new, common_suffix(old, new, p))
-  local lead = lead_for(old:sub(1, p), ellipsis) .. "~"
-  local trail = "~" .. trail_for(old:sub(#old - s + 1), ellipsis)
+  local lead = lead_for(old:sub(1, p), ellipsis)
+  local trail = trail_for(old:sub(#old - s + 1), ellipsis)
   local changed, hl = changed_for(old, new, p, s)
   local stop = #lead + #changed
   return lead .. changed .. trail,

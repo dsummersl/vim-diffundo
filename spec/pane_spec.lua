@@ -94,7 +94,7 @@ describe("pane.render", function()
     pane.render()
 
     assert.are.equal(20, config(vim).width)
-    assert.are.equal("B + c             #3", vim:pane_lines()[1])
+    assert.are.equal("B   + c           #3", vim:pane_lines()[1])
   end)
 
   it("flips to the upper right when the cursor row would sit under it", function()
@@ -176,7 +176,7 @@ describe("the pane's autocmds", function()
 
     vim:fire("TextChanged", { buffer = vim.source_bn })
 
-    assert.are.equal("@ + d                               #4", vim:pane_lines()[1])
+    assert.are.equal("@   + d                             #4", vim:pane_lines()[1])
     assert.are.equal(" +2 -0 lines ", config(vim).footer)
   end)
 
@@ -201,9 +201,9 @@ describe("pane.focus", function()
   it("expands into the whole tree and lands on the diff's row", function()
     assert.are.equal(vim:pane_window(), vim.current_win)
     assert.are.same({
-      "@ + c                               #3",
-      "│ + b                               #2",
-      "│ + a                               #1",
+      "@   + c                             #3",
+      "│   + b                             #2",
+      "│   + a                             #1",
       "│                                   #0",
     }, vim:pane_lines())
     assert.are.same({ 2, 0 }, vim.windows[vim:pane_window()].cursor)
@@ -288,9 +288,9 @@ describe("pane.focus", function()
     vim:press("<c-cr>")
 
     assert.are.same({
-      "╷ + c                               #3",
-      "│ + b                               #2",
-      "@ + a                               #1",
+      "╷   + c                             #3",
+      "│   + b                             #2",
+      "@   + a                             #1",
       "│                                   #0",
     }, vim:pane_lines())
     assert.are.same({ 3, 0 }, vim.windows[vim:pane_window()].cursor)
@@ -353,7 +353,7 @@ describe("pane.set_filter", function()
     pane.render()
 
     assert.are.equal(" filter!: c ", config(vim).footer)
-    assert.are.same({ "┆   3 undos" }, vim:pane_lines())
+    assert.are.same({ "┆     3 undos" }, vim:pane_lines())
   end)
 
   it("rejects a bad pattern before storing it", function()
@@ -409,7 +409,7 @@ describe("pane folds", function()
     pane.focus()
 
     assert.are.same({ { first = 3, last = 7 } }, vim.folds)
-    assert.are.same({ ["3"] = "┆    5 undos" }, vim.t.diffundo_pane_captions)
+    assert.are.same({ ["3"] = "┆      5 undos" }, vim.t.diffundo_pane_captions)
     assert.are.equal(0, vim.windows[vim:pane_window()].options.foldlevel)
   end)
 

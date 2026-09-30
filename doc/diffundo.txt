@@ -106,9 +106,10 @@ history (boolean, default true)
 
 glyphs (table, merged over `{ buffer = "@", write = "w", gap = "┆",
 ellipsis = "…" }`)
-    Glyphs the pane draws: `buffer` marks your buffer's state, `write` a
-    state written to disk, `gap` the gap-row and fold-caption prefix,
-    `ellipsis` the truncation marker.
+    Glyphs the pane draws: `buffer` marks your buffer's state in the tree,
+    `write` a state written to disk (drawn in its own column beside the
+    tree), `gap` the gap-row and fold-caption prefix, `ellipsis` the
+    truncation marker.
 
 date_format (string, or function(time: integer): string; default
 "%Y-%m-%d %H:%M:%S")

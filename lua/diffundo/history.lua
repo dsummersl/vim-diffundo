@@ -451,13 +451,21 @@ local function pip_for(i, r, opts, g, heads)
   if r.seq == opts.buffer then
     return g.buffer
   end
-  if r.save then
-    return g.write
-  end
   if heads[i] then
     return "╷"
   end
   return "│"
+end
+
+---@param r diffundo.Row
+---@param opts diffundo.DisplayOpts
+---@param g diffundo.Glyphs
+---@return string
+local function write_mark(r, opts, g)
+  if r.save and r.seq ~= opts.buffer then
+    return g.write
+  end
+  return " "
 end
 
 ---@param pip string
@@ -476,7 +484,7 @@ local function pass_columns(lane, open_i)
   local cells = {}
   for c = 1, lane - 1 do
     if c == 1 or (open_i and open_i[c]) then
-      cells[c] = "┊"
+      cells[c] = "╎"
     else
       cells[c] = " "
     end
@@ -494,7 +502,7 @@ local function gutter_for(i, lane, open_i, pip, turn)
   local cells = pass_columns(lane[i], open_i)
   if turn then
     for c = 1, lane[i] - 2 do
-      cells[c] = "┊"
+      cells[c] = "╎"
     end
     cells[lane[i] - 1] = "├"
     cells[lane[i]] = cap_for(pip)
@@ -502,6 +510,19 @@ local function gutter_for(i, lane, open_i, pip, turn)
     cells[lane[i]] = pip
   end
   return table.concat(cells, "")
+end
+
+---@param gutter string
+---@return diffundo.Span[]
+local function dash_spans(gutter)
+  local spans = {}
+  for i = 1, #gutter do
+    local byte = gutter:byte(i)
+    if (byte < 0x80 or byte >= 0xC0) and gutter:sub(i, i + 2) == "╎" then
+      spans[#spans + 1] = { line = 0, hl = "DiffundoGap", col_start = i - 1, col_end = i + 2 }
+    end
+  end
+  return spans
 end
 
 ---@param b integer
@@ -656,10 +677,13 @@ end
 local function row_line(ctx, i)
   local r = ctx.view[i]
   local gutter = ctx.gutters[i]
-  local prefix = gutter .. string.rep(" ", ctx.tree_w - cell_width(gutter) + 1)
+  local prefix = gutter
+    .. string.rep(" ", ctx.tree_w - cell_width(gutter) + 1)
+    .. write_mark(r, ctx.opts, ctx.glyphs)
+    .. " "
   local preview, marks = preview_parts(r, ctx.glyphs.ellipsis)
   local seq = "#" .. r.seq
-  local body_w = math.max(0, ctx.width - ctx.tree_w - 1 - ctx.seq_w - 1)
+  local body_w = math.max(0, ctx.width - ctx.tree_w - 4 - ctx.seq_w)
   if cell_width(preview) > body_w then
     preview = truncate_cells(preview, body_w, ctx.glyphs.ellipsis)
     marks = clipped(marks, #preview)
@@ -675,6 +699,9 @@ local function row_line(ctx, i)
     spans[#spans + 1] =
       { line = 0, hl = mark.hl, col_start = #prefix + mark.from, col_end = #prefix + mark.to }
   end
+  for _, span in ipairs(dash_spans(gutter)) do
+    spans[#spans + 1] = span
+  end
   return line, spans
 end
 
@@ -683,7 +710,7 @@ end
 ---@param writes integer
 ---@return string
 local function caption_text(ctx, count, writes)
-  local text = ctx.glyphs.gap .. string.rep(" ", ctx.tree_w + 2) .. count .. " undo"
+  local text = ctx.glyphs.gap .. string.rep(" ", ctx.tree_w + 4) .. count .. " undo"
   if count ~= 1 then
     text = text .. "s"
   end

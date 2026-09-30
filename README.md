@@ -50,10 +50,10 @@ corner shows what the diff split is comparing.
 
 ```
 ╭─ #4  2026-09-26 10:12:03 ────────╮   <- what we're currently diffing, and when the change happened
-│@ + return x                   #12│   <- the undo # of your current buffer (what you're editing now).
-│┆   7 undos 1w                    │   <- states in between (total + # written to disk)
-│╷ - local y = 1                 #4│   <- the undo that the diff shows
-│┆   3 undos                       │   <- states below...
+│@   + return x                 #12│   <- the undo # of your current buffer (what you're editing now).
+│┆     7 undos 1w                  │   <- states in between (total + # written to disk)
+│╷   - local y = 1               #4│   <- the undo that the diff shows
+│┆     3 undos                     │   <- states below...
 ╰──────────────────── +3 -5 lines ─╯
 ```
 

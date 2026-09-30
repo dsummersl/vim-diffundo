@@ -72,7 +72,7 @@ describe("history.preview_parts", function()
       row({ added = { "one two 3 four five" }, removed = { "one two three four five" } })
     )
 
-    assert.are.equal("…two ~3~ four…", text)
+    assert.are.equal("…two 3 four…", text)
     assert.are.equal("DiffChange", spans[1].hl)
     assert.are.equal("DiffText", spans[2].hl)
     assert.are.equal("3", text:sub(spans[2].from + 1, spans[2].to))
@@ -84,7 +84,7 @@ describe("history.preview_parts", function()
       { buffer = "@", write = "w", gap = "┆", ellipsis = "..." }
     )
 
-    assert.are.equal("...b ~C~ d...", text)
+    assert.are.equal("...b C d...", text)
   end)
 
   it("shows counts with the lines unit for mixed changes", function()
@@ -286,9 +286,9 @@ describe("history.display rows", function()
     local display = history.display(rows, { width = 30 })
 
     assert.are.same({
-      "╷ + foo()                   #3",
-      "│ +0 lines                  #2",
-      "│ +0 lines                  #1",
+      "╷   + foo()                 #3",
+      "│   +0 lines                #2",
+      "│   +0 lines                #1",
       "│                           #0",
     }, display.lines)
     assert.are.same({ 1, 2, 3, 4 }, display.row_to_line)
@@ -304,16 +304,16 @@ describe("history.display rows", function()
     }
     local display = history.display(rows, { width = 30, buffer = 4, current = 3 })
 
-    assert.matches("^@ ", display.lines[1])
-    assert.matches("^w ", display.lines[2])
-    assert.matches("^│ ", display.lines[3])
-    assert.matches("^w ", display.lines[4])
+    assert.matches("^@   ", display.lines[1])
+    assert.matches("^│ w ", display.lines[2])
+    assert.matches("^│   ", display.lines[3])
+    assert.matches("^│ w ", display.lines[4])
 
     local on_diff = history.display(rows, { width = 30, buffer = 4, current = 2 })
-    assert.matches("^│ ", on_diff.lines[3])
+    assert.matches("^│   ", on_diff.lines[3])
 
     local same = history.display(rows, { width = 30, buffer = 3, current = 3 })
-    assert.matches("^@ ", same.lines[2])
+    assert.matches("^@   ", same.lines[2])
   end)
 
   it("draws the configured glyphs", function()
@@ -326,9 +326,9 @@ describe("history.display rows", function()
     local glyphs = { buffer = "B", write = "ⓦ", gap = ":", ellipsis = "~" }
     local display = history.display(rows, { width = 30, buffer = 3, current = 1, glyphs = glyphs })
 
-    assert.matches("^B ", display.lines[1])
-    assert.matches("^ⓦ ", display.lines[2])
-    assert.matches("^│ ", display.lines[3])
+    assert.matches("^B   ", display.lines[1])
+    assert.matches("^│ ⓦ ", display.lines[2])
+    assert.matches("^│   ", display.lines[3])
   end)
 
   it("highlights the buffer's and the diff's rows", function()
@@ -397,7 +397,7 @@ describe("history.display rows", function()
 
     assert.matches("^╷", display.lines[1])
     assert.matches("^├╯", display.lines[2])
-    assert.matches("^┊│", display.lines[3])
+    assert.matches("^╎│", display.lines[3])
     assert.matches("^├╯", display.lines[4])
     assert.matches("^│", display.lines[5])
   end)
@@ -416,8 +416,8 @@ describe("history.display rows", function()
     local display = history.display(rows, { width = 30, fold_min = 9 })
 
     assert.matches("^╷", display.lines[1])
-    assert.matches("^┊├╯", display.lines[2])
-    assert.matches("^┊├╯", display.lines[3])
+    assert.matches("^╎├╯", display.lines[2])
+    assert.matches("^╎├╯", display.lines[3])
     assert.matches("^├╯", display.lines[4])
     assert.matches("^│", display.lines[5])
   end)
@@ -454,7 +454,7 @@ describe("history.display rows", function()
     local display = history.display(rows, { width = 30, fold_min = 9 })
 
     assert.matches("^├╯", display.lines[2])
-    assert.matches("^┊w", display.lines[3])
+    assert.matches("^╎│ w", display.lines[3])
     assert.matches("^├╯", display.lines[4])
   end)
 
@@ -475,10 +475,10 @@ describe("history.display rows", function()
 
     assert.matches("^╷", display.lines[1])
     assert.matches("^├╯", display.lines[2])
-    assert.matches("^┊│ %+0 lines", display.lines[3])
+    assert.matches("^╎│   %+0 lines", display.lines[3])
     assert.matches("^├╯", display.lines[7])
     assert.are.same({ { start = 3, stop = 6 } }, display.folds)
-    assert.are.same({ [3] = "┆    4 undos 1w" }, display.captions)
+    assert.are.same({ [3] = "┆      4 undos 1w" }, display.captions)
     assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, display.row_to_line)
   end)
 
@@ -497,14 +497,14 @@ describe("history.display rows", function()
     }
     local display = history.display(rows, { width = 14 })
 
-    assert.are.equal("╷  + a ver… #4", display.lines[1])
+    assert.are.equal("╷    + a v… #4", display.lines[1])
     for _, line in ipairs(display.lines) do
       assert.are.equal(14, cell_width(line))
     end
     local marks = marks_on(display, 0)
     assert.are.equal(1, #marks)
     assert.are.equal("DiffAdd", marks[1].hl)
-    assert.are.equal("+ a ver…", display.lines[1]:sub(marks[1].col_start + 1, marks[1].col_end))
+    assert.are.equal("+ a v…", display.lines[1]:sub(marks[1].col_start + 1, marks[1].col_end))
   end)
 
   it("keeps a truncated replacement's colors up to the ellipsis", function()
@@ -514,11 +514,11 @@ describe("history.display rows", function()
     }
     local display = history.display(rows, { width = 20 })
 
-    assert.are.equal("╷ x ~a-long-chan… #2", display.lines[1])
+    assert.are.equal("╷   x a-long-cha… #2", display.lines[1])
     local marks = marks_on(display, 0)
     assert.are.same({ "DiffChange", "DiffText" }, { marks[1].hl, marks[2].hl })
     assert.are.equal(
-      "a-long-chan…",
+      "a-long-cha…",
       display.lines[1]:sub(marks[2].col_start + 1, marks[2].col_end)
     )
   end)
@@ -546,10 +546,10 @@ describe("history.display collapsed", function()
     })
 
     assert.are.same({
-      "@ + line 12                    #12",
-      "┆   7 undos 1w",
-      "│ + line 4                      #4",
-      "┆   3 undos",
+      "@   + line 12                  #12",
+      "┆     7 undos 1w",
+      "│   + line 4                    #4",
+      "┆     3 undos",
     }, display.lines)
     assert.are.same({ [1] = 1, [9] = 3 }, display.row_to_line)
     assert.are.same({}, display.folds)
@@ -564,10 +564,10 @@ describe("history.display collapsed", function()
     })
 
     assert.are.same({
-      "┆   2 undos",
-      "@ + line 10                    #10",
-      "│ + line 9                      #9",
-      "┆   8 undos",
+      "┆     2 undos",
+      "@   + line 10                  #10",
+      "│   + line 9                    #9",
+      "┆     8 undos",
     }, display.lines)
   end)
 
@@ -580,8 +580,8 @@ describe("history.display collapsed", function()
     })
 
     assert.are.same({
-      "@ + line 12                    #12",
-      "┆   11 undos",
+      "@   + line 12                  #12",
+      "┆     11 undos",
       "│                               #0",
     }, display.lines)
   end)
@@ -594,7 +594,7 @@ describe("history.display collapsed", function()
       keep = { [12] = true },
     })
 
-    assert.are.same({ "@ + line 12                    #12", "┆   11 undos" }, display.lines)
+    assert.are.same({ "@   + line 12                  #12", "┆     11 undos" }, display.lines)
   end)
 
   it("keeps the kept rows' lanes and pads the gaps to the widest kept gutter", function()
@@ -613,9 +613,9 @@ describe("history.display collapsed", function()
     })
 
     assert.are.same({
-      "@  + x                      #4",
-      "├╯ + c                      #3",
-      "┆    2 undos",
+      "@    + x                    #4",
+      "├╯   + c                    #3",
+      "┆      2 undos",
     }, display.lines)
   end)
 
@@ -706,15 +706,18 @@ describe("history.display with the us.txt tree", function()
     return total
   end
 
-  ---@param gutter string
+  ---@param tree string
+  ---@param w string
   ---@param preview string
   ---@param seq integer
   ---@return string
-  local function rendered(gutter, preview, seq)
+  local function rendered(tree, w, preview, seq)
     local number = "#" .. seq
-    local body = width - tree_w - 1 - seq_w - 1
-    return gutter
-      .. string.rep(" ", tree_w - cells(gutter) + 1)
+    local body = width - tree_w - 4 - seq_w
+    return tree
+      .. string.rep(" ", tree_w - cells(tree) + 1)
+      .. w
+      .. " "
       .. preview
       .. string.rep(" ", body - cells(preview) + 1 + seq_w - #number)
       .. number
@@ -754,26 +757,26 @@ describe("history.display with the us.txt tree", function()
     local display = history.display(rows, { width = width, current = 20 })
 
     local expected = {
-      rendered("╷", "~06~", 20),
-      rendered("├╯", "+0 lines", 19),
-      rendered("│", "+0 lines", 18),
-      rendered("│", "~SIX~", 17),
-      rendered("├╯", "~final~", 16),
-      rendered("┊│", "~15~", 15),
-      rendered("┊│", "- one", 14),
-      rendered("┊│", "- two", 13),
-      rendered("┊│", "- three", 12),
-      rendered("┊│", "- six", 11),
-      rendered("┊│", "- seven", 10),
-      rendered("┊│", "- eight", 9),
-      rendered("┊│", "- 7", 8),
-      rendered("┊│", "- 8", 7),
-      rendered("┊w", "- 9", 6),
-      rendered("├╯", "- 10", 5),
-      rendered("w", "-2 lines", 4),
-      rendered("│", "+5 -2 lines", 3),
-      rendered("│", "+5 -5 lines", 2),
-      rendered("│", "+10 lines", 1),
+      rendered("╷", " ", "06", 20),
+      rendered("├╯", " ", "+0 lines", 19),
+      rendered("│", " ", "+0 lines", 18),
+      rendered("│", " ", "SIX", 17),
+      rendered("├╯", " ", "final", 16),
+      rendered("╎│", " ", "15", 15),
+      rendered("╎│", " ", "- one", 14),
+      rendered("╎│", " ", "- two", 13),
+      rendered("╎│", " ", "- three", 12),
+      rendered("╎│", " ", "- six", 11),
+      rendered("╎│", " ", "- seven", 10),
+      rendered("╎│", " ", "- eight", 9),
+      rendered("╎│", " ", "- 7", 8),
+      rendered("╎│", " ", "- 8", 7),
+      rendered("╎│", "w", "- 9", 6),
+      rendered("├╯", " ", "- 10", 5),
+      rendered("│", "w", "-2 lines", 4),
+      rendered("│", " ", "+5 -2 lines", 3),
+      rendered("│", " ", "+5 -5 lines", 2),
+      rendered("│", " ", "+10 lines", 1),
     }
 
     for i, line in ipairs(expected) do
@@ -790,7 +793,7 @@ describe("history.display with the us.txt tree", function()
     local display = history.display(rows, { width = width, current = 20 })
 
     assert.are.same({ { start = 6, stop = 15 } }, display.folds)
-    assert.are.same({ [6] = "┆    10 undos 1w" }, display.captions)
+    assert.are.same({ [6] = "┆      10 undos 1w" }, display.captions)
     assert.are.same(
       { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 },
       display.row_to_line
@@ -964,15 +967,18 @@ describe("history.display with sibling branches", function()
     return total
   end
 
-  ---@param gutter string
+  ---@param tree string
+  ---@param w string
   ---@param preview string
   ---@param seq integer
   ---@return string
-  local function rendered(gutter, preview, seq)
+  local function rendered(tree, w, preview, seq)
     local number = "#" .. seq
-    local body = width - tree_w - 1 - seq_w - 1
-    return gutter
-      .. string.rep(" ", tree_w - cells(gutter) + 1)
+    local body = width - tree_w - 4 - seq_w
+    return tree
+      .. string.rep(" ", tree_w - cells(tree) + 1)
+      .. w
+      .. " "
       .. preview
       .. string.rep(" ", body - cells(preview) + 1 + seq_w - #number)
       .. number
@@ -984,26 +990,26 @@ describe("history.display with sibling branches", function()
     local display = history.display(rows, { width = width, current = 18 })
 
     local expected = {
-      rendered("╷", "~Q~", 20),
-      rendered("├╯", "+0 lines", 19),
-      rendered("w", "+0 lines", 18),
-      rendered("│", "~W~", 17),
-      rendered("├╯", "~Z~", 16),
-      rendered("┊╷", "- 2 15 things that are", 15),
-      rendered("┊│", "- B", 14),
-      rendered("┊│", "- 2 15 things that are", 13),
-      rendered("┊│", "- G", 12),
-      rendered("┊│", "- 7", 11),
-      rendered("┊│", "- 8", 10),
-      rendered("┊│", "- 9", 9),
-      rendered("┊│", "- 1 15 things that are", 8),
-      rendered("┊w", "- 10", 7),
-      rendered("┊│", "- 11", 6),
-      rendered("├╯", "-2 lines", 5),
-      rendered("w", "+5 -2 lines", 4),
-      rendered("│", "+5 -5 lines", 3),
-      rendered("w", "+10 lines", 2),
-      rendered("w", "~1~", 1),
+      rendered("╷", " ", "Q", 20),
+      rendered("├╯", " ", "+0 lines", 19),
+      rendered("│", "w", "+0 lines", 18),
+      rendered("│", " ", "W", 17),
+      rendered("├╯", " ", "Z", 16),
+      rendered("╎╷", " ", "- 2 15 things that are", 15),
+      rendered("╎│", " ", "- B", 14),
+      rendered("╎│", " ", "- 2 15 things that are", 13),
+      rendered("╎│", " ", "- G", 12),
+      rendered("╎│", " ", "- 7", 11),
+      rendered("╎│", " ", "- 8", 10),
+      rendered("╎│", " ", "- 9", 9),
+      rendered("╎│", " ", "- 1 15 things that are", 8),
+      rendered("╎│", "w", "- 10", 7),
+      rendered("╎│", " ", "- 11", 6),
+      rendered("├╯", " ", "-2 lines", 5),
+      rendered("│", "w", "+5 -2 lines", 4),
+      rendered("│", " ", "+5 -5 lines", 3),
+      rendered("│", "w", "+10 lines", 2),
+      rendered("│", "w", "1", 1),
     }
 
     for i, line in ipairs(expected) do
@@ -1020,7 +1026,7 @@ describe("history.display with sibling branches", function()
     local display = history.display(rows, { width = width, current = 18 })
 
     assert.are.same({ { start = 7, stop = 15 } }, display.folds)
-    assert.are.same({ [7] = "┆    9 undos 1w" }, display.captions)
+    assert.are.same({ [7] = "┆      9 undos 1w" }, display.captions)
     assert.are.same(
       { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 },
       display.row_to_line
@@ -1116,10 +1122,10 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 4 })
 
     assert_tree_lines(display, {
-      "╷  + x                                #4",
-      "├╯ + c                                #3",
-      "├╯ + b                                #2",
-      "│  ~a~                                #1",
+      "╷    + x                              #4",
+      "├╯   + c                              #3",
+      "├╯   + b                              #2",
+      "│    a                                #1",
     })
   end)
 
@@ -1134,11 +1140,11 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 5 })
 
     assert_tree_lines(display, {
-      "╷  + y                                #5",
-      "├╯ + x                                #4",
-      "┊╷ + c                                #3",
-      "├╯ + b                                #2",
-      "│  ~a~                                #1",
+      "╷    + y                              #5",
+      "├╯   + x                              #4",
+      "╎╷   + c                              #3",
+      "├╯   + b                              #2",
+      "│    a                                #1",
     })
   end)
 
@@ -1150,8 +1156,8 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 2 })
 
     assert_tree_lines(display, {
-      "╷  ~z~                                #2",
-      "├╯ ~a~                                #1",
+      "╷    z                                #2",
+      "├╯   a                                #1",
     })
   end)
 
@@ -1166,11 +1172,11 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 5, fold_min = 9 })
 
     assert_tree_lines(display, {
-      "╷  + u                                #5",
-      "│  + t                                #4",
-      "│  + s                                #3",
-      "├╯ + b                                #2",
-      "│  ~a~                                #1",
+      "╷    + u                              #5",
+      "│    + t                              #4",
+      "│    + s                              #3",
+      "├╯   + b                              #2",
+      "│    a                                #1",
     })
   end)
 
@@ -1191,23 +1197,23 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 30, current = 17, fold_min = 99 })
 
     assert_tree_lines(display, {
-      "╷  + x                     #17",
-      "│  + x                     #16",
-      "│  + x                     #15",
-      "│  + x                     #14",
-      "│  + x                     #13",
-      "│  + x                     #12",
-      "├╯ + x                     #11",
-      "┊│ + x                     #10",
-      "┊│ + x                      #9",
-      "┊│ + x                      #8",
-      "┊│ + x                      #7",
-      "┊│ + x                      #6",
-      "┊│ + x                      #5",
-      "┊│ + x                      #4",
-      "┊│ + x                      #3",
-      "├╯ + x                      #2",
-      "│  + x                      #1",
+      "╷    + x                   #17",
+      "│    + x                   #16",
+      "│    + x                   #15",
+      "│    + x                   #14",
+      "│    + x                   #13",
+      "│    + x                   #12",
+      "├╯   + x                   #11",
+      "╎│   + x                   #10",
+      "╎│   + x                    #9",
+      "╎│   + x                    #8",
+      "╎│   + x                    #7",
+      "╎│   + x                    #6",
+      "╎│   + x                    #5",
+      "╎│   + x                    #4",
+      "╎│   + x                    #3",
+      "├╯   + x                    #2",
+      "│    + x                    #1",
       "│                           #0",
     })
   end)
@@ -1241,23 +1247,23 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 30, current = 17, fold_min = 99 })
 
     assert_tree_lines(display, {
-      "╷    + x                   #17",
-      "├╯   + x                   #16",
-      "┊┊├╯ + x                   #15",
-      "┊┊├╯ + x                   #14",
-      "┊├╯  + x                   #13",
-      "┊├╯  + x                   #12",
-      "├╯   + x                   #11",
-      "┊│   + x                   #10",
-      "┊│   + x                    #9",
-      "┊│   + x                    #8",
-      "┊│   + x                    #7",
-      "┊│   + x                    #6",
-      "┊│   + x                    #5",
-      "┊│   + x                    #4",
-      "┊│   + x                    #3",
-      "┊│   + x                    #2",
-      "├w   + x                    #1",
+      "╷      + x                 #17",
+      "├╯     + x                 #16",
+      "╎╎├╯   + x                 #15",
+      "╎╎├╯   + x                 #14",
+      "╎├╯    + x                 #13",
+      "╎├╯    + x                 #12",
+      "├╯     + x                 #11",
+      "╎│     + x                 #10",
+      "╎│     + x                  #9",
+      "╎│     + x                  #8",
+      "╎│     + x                  #7",
+      "╎│     + x                  #6",
+      "╎│     + x                  #5",
+      "╎│     + x                  #4",
+      "╎│     + x                  #3",
+      "╎│     + x                  #2",
+      "├╯   w + x                  #1",
       "│                           #0",
     })
   end)
@@ -1300,18 +1306,18 @@ describe("history.display with real neovim undo shapes", function()
     )
 
     assert_tree_lines(display, {
-      "@   + x                    #12",
-      "├╯  + x                    #11",
-      "├╯  + x                    #10",
-      "┊├╯ + x                     #9",
-      "┊├╯ + x                     #8",
-      "┊├╯ + x                     #7",
-      "┊├╯ + x                     #6",
-      "┊├╯ + x                     #5",
-      "┊├╯ + x                     #4",
-      "│   + x                     #3",
-      "├╯  + x                     #2",
-      "├╯  + x                     #1",
+      "@     + x                  #12",
+      "├╯    + x                  #11",
+      "├╯    + x                  #10",
+      "╎├╯   + x                   #9",
+      "╎├╯   + x                   #8",
+      "╎├╯   + x                   #7",
+      "╎├╯   + x                   #6",
+      "╎├╯   + x                   #5",
+      "╎├╯   + x                   #4",
+      "│     + x                   #3",
+      "├╯    + x                   #2",
+      "├╯    + x                   #1",
       "│                           #0",
     })
   end)
@@ -1348,22 +1354,22 @@ describe("history.display with real neovim undo shapes", function()
         history.display(rows, { width = 30, current = 16, buffer = 16, fold_min = 99 })
 
       assert_tree_lines(display, {
-        "@   + x                    #16",
-        "┊┊w + x                    #15",
-        "┊┊│ + x                    #14",
-        "┊├╯ + x                    #13",
-        "┊├w + x                    #12",
-        "├w  + x                    #11",
-        "┊│  + x                    #10",
-        "┊│  + x                     #9",
-        "┊│  + x                     #8",
-        "┊│  + x                     #7",
-        "┊w  + x                     #6",
-        "┊w  + x                     #5",
-        "┊│  + x                     #4",
-        "┊│  + x                     #3",
-        "┊│  + x                     #2",
-        "├w  + x                     #1",
+        "@     + x                  #16",
+        "╎╎╷ w + x                  #15",
+        "╎╎│   + x                  #14",
+        "╎├╯   + x                  #13",
+        "╎├╯ w + x                  #12",
+        "├╯  w + x                  #11",
+        "╎│    + x                  #10",
+        "╎│    + x                   #9",
+        "╎│    + x                   #8",
+        "╎│    + x                   #7",
+        "╎│  w + x                   #6",
+        "╎│  w + x                   #5",
+        "╎│    + x                   #4",
+        "╎│    + x                   #3",
+        "╎│    + x                   #2",
+        "├╯  w + x                   #1",
         "│                           #0",
       })
     end
@@ -1383,18 +1389,18 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 30, current = 13, buffer = 13, fold_min = 99 })
 
     assert_tree_lines(display, {
-      "@   + x                    #13",
-      "┊├╯ + x                    #11",
-      "┊├╯ + x                    #10",
-      "│   + x                     #9",
-      "├╯  + x                     #8",
-      "├╯  + x                     #7",
-      "┊├╯ + x                     #6",
-      "┊├╯ + x                     #5",
-      "┊├╯ + x                     #4",
-      "├╯  + x                     #3",
-      "│   + x                     #2",
-      "├╯  + x                     #1",
+      "@     + x                  #13",
+      "╎├╯   + x                  #11",
+      "╎├╯   + x                  #10",
+      "│     + x                   #9",
+      "├╯    + x                   #8",
+      "├╯    + x                   #7",
+      "╎├╯   + x                   #6",
+      "╎├╯   + x                   #5",
+      "╎├╯   + x                   #4",
+      "├╯    + x                   #3",
+      "│     + x                   #2",
+      "├╯    + x                   #1",
       "│                           #0",
     })
   end)
@@ -1409,10 +1415,10 @@ describe("history.display with real neovim undo shapes", function()
     local display = history.display(rows, { width = 40, current = 4 })
 
     assert_tree_lines(display, {
-      "╷  + x                                #4",
-      "├w + c                                #3",
-      "├w + b                                #2",
-      "w  ~a~                                #1",
+      "╷    + x                              #4",
+      "├╯ w + c                              #3",
+      "├╯ w + b                              #2",
+      "│  w a                                #1",
     })
   end)
 
@@ -1437,6 +1443,61 @@ describe("history.display with real neovim undo shapes", function()
 
     assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }, display.row_to_line)
     assert.are.same({ { start = 9, stop = 12 } }, display.folds)
-    assert.are.same({ [9] = "┆    4 undos" }, display.captions)
+    assert.are.same({ [9] = "┆      4 undos" }, display.captions)
   end)
+end)
+
+describe("history.display with the attached real session tree", function()
+  it(
+    "renders the session's undotree.json with the write column and dashed pass-throughs",
+    function()
+      local parents =
+        { [1] = 0, [2] = 0, [3] = 2, [4] = 3, [5] = 4, [6] = 5, [7] = 6, [8] = 7, [9] = 8 }
+      parents[10] = 9
+      parents[11] = 10
+      parents[12] = 1
+      parents[13] = 1
+      parents[14] = 13
+      parents[15] = 14
+      parents[16] = 0
+      local saves =
+        { [1] = 1, [2] = 1, [5] = 2, [6] = 3, [10] = 4, [11] = 5, [12] = 6, [15] = 7, [16] = 8 }
+      local rows = {}
+      for seq = 16, 1, -1 do
+        rows[#rows + 1] =
+          row({ seq = seq, parent = parents[seq], save = saves[seq], added = { "x" } })
+      end
+      rows[#rows + 1] = original()
+      local display =
+        history.display(rows, { width = 40, current = 16, buffer = 16, fold_min = 99 })
+
+      assert.are.same({
+        "@     + x                            #16",
+        "╎╎╷ w + x                            #15",
+        "╎╎│   + x                            #14",
+        "╎├╯   + x                            #13",
+        "╎├╯ w + x                            #12",
+        "├╯  w + x                            #11",
+        "╎│  w + x                            #10",
+        "╎│    + x                             #9",
+        "╎│    + x                             #8",
+        "╎│    + x                             #7",
+        "╎│  w + x                             #6",
+        "╎│  w + x                             #5",
+        "╎│    + x                             #4",
+        "╎│    + x                             #3",
+        "╎│  w + x                             #2",
+        "├╯  w + x                             #1",
+        "│                                     #0",
+      }, display.lines)
+
+      local gap_spans = 0
+      for _, span in ipairs(display.spans) do
+        if span.hl == "DiffundoGap" then
+          gap_spans = gap_spans + 1
+        end
+      end
+      assert.are.equal(15, gap_spans)
+    end
+  )
 end)
