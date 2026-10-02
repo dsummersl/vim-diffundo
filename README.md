@@ -47,6 +47,8 @@ Other commands:
 
 # History pane
 
+## miniview
+
 While the diff split is open, a small pane in the diff window's lower right
 corner shows what the diff split is comparing.
 
@@ -59,8 +61,11 @@ corner shows what the diff split is comparing.
 ╰──────────────────── +3 -5 lines ─╯
 ```
 
+
+## focus mode
+
 When you use `:Diffundo focus` the pane expands to show the full undo
-history. Keymaps in the pane buffer:
+history and you are put into history window so that you can explore the full undo tree.
 
 - `j`/`k` are plain motions (not mapped by the plugin).
 - `J`/`K` move to the next/previous undo that was written to disk.
