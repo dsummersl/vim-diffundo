@@ -5,6 +5,8 @@ from your undo history into your current buffer.
 
 Requires neovim 0.10 or newer.
 
+![screenshot of diffundo.nvim](./diffundo-screenshot.webp)
+
 # Installation
 
 Use your favorite package manager to install this plugin. Example configuration:
