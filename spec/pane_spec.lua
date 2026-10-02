@@ -331,6 +331,12 @@ describe("pane.focus", function()
     assert.are.same({ 2, 0 }, win.cursor)
   end)
 
+  it("collapsing scrolls the map back to its first line", function()
+    vim:press("q")
+
+    assert.are.same({ topline = 1 }, vim.windows[vim:pane_window()].view)
+  end)
+
   it("collapsing redraws the map from the current undo tree", function()
     vim.history.entries[3].save = 1
     cache.reset(vim.source_bn)
