@@ -303,6 +303,13 @@ local function opened_folds(win)
 end
 
 ---@param win integer
+local function scroll_to_top(win)
+  vim.api.nvim_win_call(win, function()
+    vim.fn.winrestview({ topline = 1 })
+  end)
+end
+
+---@param win integer
 ---@param display diffundo.Display
 local function fold(win, display)
   vim.t.diffundo_pane_captions = captions_of(display)
@@ -450,6 +457,9 @@ function M.render()
   window.render(win, display.lines)
   paint(win, display)
   fold(win, display)
+  if #display.lines <= height then
+    scroll_to_top(win)
+  end
   vim.t.diffundo_pane_seqs = seqs_for(all, display)
 end
 

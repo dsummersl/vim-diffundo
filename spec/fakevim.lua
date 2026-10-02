@@ -462,6 +462,9 @@ local function fn(self)
     winline = function()
       return self.winline or 1
     end,
+    winrestview = function(view)
+      self.windows[self.current_win].view = view
+    end,
     foldclosed = function(line)
       for _, found in ipairs(self.folds) do
         if found.first <= line and line <= found.last and not found.open then
