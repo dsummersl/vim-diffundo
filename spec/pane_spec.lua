@@ -323,6 +323,23 @@ describe("pane.focus", function()
     assert.is_false(config(vim).focusable)
   end)
 
+  it("collapsing clears the cursorline and rests the cursor on the diff's row", function()
+    vim:press("q")
+
+    local win = vim.windows[vim:pane_window()]
+    assert.is_false(win.options.cursorline)
+    assert.are.same({ 2, 0 }, win.cursor)
+  end)
+
+  it("collapsing redraws the map from the current undo tree", function()
+    vim.history.entries[3].save = 1
+    cache.reset(vim.source_bn)
+
+    vim:press("q")
+
+    assert.matches("^@ w ", vim:pane_lines()[1])
+  end)
+
   it("<esc> collapses too", function()
     vim:press("<esc>")
 

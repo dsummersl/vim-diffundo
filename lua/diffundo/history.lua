@@ -458,11 +458,10 @@ local function pip_for(i, r, opts, g, heads)
 end
 
 ---@param r diffundo.Row
----@param opts diffundo.DisplayOpts
 ---@param g diffundo.Glyphs
 ---@return string
-local function write_mark(r, opts, g)
-  if r.save and r.seq ~= opts.buffer then
+local function write_mark(r, g)
+  if r.save then
     return g.write
   end
   return " "
@@ -679,7 +678,7 @@ local function row_line(ctx, i)
   local gutter = ctx.gutters[i]
   local prefix = gutter
     .. string.rep(" ", ctx.tree_w - cell_width(gutter) + 1)
-    .. write_mark(r, ctx.opts, ctx.glyphs)
+    .. write_mark(r, ctx.glyphs)
     .. " "
   local preview, marks = preview_parts(r, ctx.glyphs.ellipsis)
   local seq = "#" .. r.seq

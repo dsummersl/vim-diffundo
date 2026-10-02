@@ -8,6 +8,7 @@ CONTENTS                                                     *diffundo-contents*
   3. Options ..................................... |diffundo-options|
   4. API.......................................... |diffundo-api|
   5. Repeating ................................... |diffundo-repeat|
+  6. History pane ................................ |diffundo-pane|
 
 ==============================================================================
 1. COMMAND                                                          *:Diffundo*
@@ -44,7 +45,8 @@ CONTENTS                                                     *diffundo-contents*
 
     Every subcommand opens a floating history pane next to the diff window
     showing the buffer's state and the diff's state, unless the pane is
-    disabled with the `history` option (see |diffundo-options|).
+    disabled with the `history` option (see |diffundo-options|). See
+    |diffundo-pane| for how to read it.
 
 ==============================================================================
 2. SETUP                                                        *diffundo-setup*
@@ -168,5 +170,31 @@ that steps the diff back two undo states: >lua
 
 With tpope/vim-repeat installed, |.| runs the last :Diffundo command
 again with the same arguments.
+
+==============================================================================
+6. HISTORY PANE                                                  *diffundo-pane*
+
+Each row of the pane is one undo state: the tree, a write column, a preview
+of the change, and the state's number on the right: >
+
+    @   + return x                 #12
+    ┆     7 undos 1w
+    ╷ w - local y = 1               #4
+    ┆     3 undos
+<
+  tree          `@` (the `buffer` glyph) is your buffer's state; the other
+                glyphs draw the undo tree's branches.
+  write column  `w` (the `write` glyph) is drawn in its own column, right of
+                the tree, on every state that was written to disk. This
+                includes the buffer's own row.
+  gap rows      Collapsed, the pane shows only the buffer's state and the
+                diff's state. The states hidden between them become a gap
+                row, `┆  N undos`, followed by the number of those that
+                were written, `Nw`, when there are any. The expanded pane
+                folds long off-trunk stretches into the same captions.
+
+The pane is collapsed until |:Diffundo-focus|. Leaving the focused pane
+(`q`, `<esc>` or entering another window) collapses it and redraws it from
+the current undo tree, with the cursor on the diff's state.
 
  vim:tw=78:ts=8:ft=help:norl:

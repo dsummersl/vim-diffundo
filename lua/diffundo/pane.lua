@@ -563,6 +563,18 @@ local function back_to_source()
   end
 end
 
+local function settle_collapsed()
+  local win = pane_win()
+  if not window.is_open(win) then
+    return
+  end
+  ---@cast win integer
+  vim.api.nvim_win_call(win, function()
+    vim.wo.cursorline = false
+  end)
+  select_seq(vim.t.diffundo_diff_undonr)
+end
+
 ---@param back boolean
 function M.collapse(back)
   vim.t.diffundo_pane_expanded = false
@@ -570,6 +582,7 @@ function M.collapse(back)
     back_to_source()
   end
   M.render()
+  settle_collapsed()
 end
 
 ---@param seq integer
