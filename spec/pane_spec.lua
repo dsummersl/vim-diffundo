@@ -327,7 +327,7 @@ describe("pane.focus", function()
     vim:press("q")
 
     local win = vim.windows[vim:pane_window()]
-    assert.is_falsy(win.options.cursorline)
+    assert.is_false(win.options.cursorline)
     assert.are.same({ 2, 0 }, win.cursor)
   end)
 
