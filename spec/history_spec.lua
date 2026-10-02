@@ -294,7 +294,7 @@ describe("history.display rows", function()
     assert.are.same({ 1, 2, 3, 4 }, display.row_to_line)
   end)
 
-  it("pips the buffer's state over a write, and leaves the diff's row unmarked", function()
+  it("pips the buffer's state and still marks its write in the write column", function()
     local rows = {
       row({ seq = 4, parent = 3 }),
       row({ seq = 3, parent = 2, save = 1 }),
@@ -313,7 +313,7 @@ describe("history.display rows", function()
     assert.matches("^│   ", on_diff.lines[3])
 
     local same = history.display(rows, { width = 30, buffer = 3, current = 3 })
-    assert.matches("^@   ", same.lines[2])
+    assert.matches("^@ w ", same.lines[2])
   end)
 
   it("draws the configured glyphs", function()
@@ -1472,7 +1472,7 @@ describe("history.display with the attached real session tree", function()
         history.display(rows, { width = 40, current = 16, buffer = 16, fold_min = 99 })
 
       assert.are.same({
-        "@     + x                            #16",
+        "@   w + x                            #16",
         "╎╎╷ w + x                            #15",
         "╎╎│   + x                            #14",
         "╎├╯   + x                            #13",
